@@ -1,22 +1,17 @@
 extends Node2D
 
-# Kamera
-var cam_speed = 400
-var zoom_min = 0.5
-var zoom_max = 3.0
+var cam_speed: float = 400.0
+var gold: int = 200
+var selected_units: Array = []
 
-# Oyun durumu
-var gold = 200
-var selected_units = []
-
-func _ready():
+func _ready() -> void:
 print("Iron Front başladı!")
 
-func _process(delta):
+func _process(delta: float) -> void:
 _handle_camera(delta)
 
-func _handle_camera(delta):
-var cam = $Camera2D
+func _handle_camera(delta: float) -> void:
+var cam: Camera2D = $Camera2D
 if Input.is_action_pressed("ui_left"):
 cam.position.x -= cam_speed * delta
 if Input.is_action_pressed("ui_right"):
