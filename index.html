@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>IRON FRONT — RTS</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<!-- TOP HUD -->
+<div id="hud-top">
+  <div id="res-display">
+    <span class="res-item"><span class="res-icon">💰</span><span id="res-gold">200</span></span>
+    <span class="res-item"><span class="res-icon">⛽</span><span id="res-oil">0</span></span>
+  </div>
+  <div id="game-title">IRON FRONT</div>
+  <div id="wave-display">DALGA <span id="wave-num">1</span></div>
+</div>
+
+<!-- BOTTOM HUD -->
+<div id="hud-bottom">
+  <div id="selection-info">
+    <div id="sel-portrait"></div>
+    <div id="sel-stats"></div>
+  </div>
+  <div id="action-bar">
+    <button class="action-btn" id="btn-produce" onclick="produceTank()">
+      <span class="btn-icon">🏗️</span>
+      <span class="btn-label">Tank Üret</span>
+      <span class="btn-cost">100💰</span>
+    </button>
+    <button class="action-btn" id="btn-stop" onclick="stopSelected()">
+      <span class="btn-icon">✋</span>
+      <span class="btn-label">Dur</span>
+    </button>
+    <button class="action-btn" id="btn-attack" onclick="attackMove()">
+      <span class="btn-icon">⚔️</span>
+      <span class="btn-label">Saldır</span>
+    </button>
+  </div>
+  <div id="minimap-container">
+    <canvas id="minimap"></canvas>
+  </div>
+</div>
+
+<!-- STATUS MSG -->
+<div id="status-msg"></div>
+
+<!-- GAME OVER -->
+<div id="game-over" style="display:none">
+  <div id="game-over-inner">
+    <div id="game-over-title">YIKILDIN</div>
+    <div id="game-over-sub">Düşman üssünü ele geçirdi</div>
+    <button id="restart-btn" onclick="restartGame()">YENİDEN BAŞLA</button>
+  </div>
+</div>
+
+<script src="game.js"></script>
+</body>
+</html>

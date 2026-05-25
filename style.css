@@ -1,0 +1,97 @@
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@700;900&display=swap');
+
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html,body { width:100%; height:100%; overflow:hidden; background:#0a0c08; font-family:'Share Tech Mono', monospace; }
+#game { display:block; touch-action:none; position:fixed; inset:0; }
+
+/* TOP HUD */
+#hud-top {
+  position:fixed; top:0; left:0; right:0; height:48px;
+  background:linear-gradient(180deg,rgba(8,14,6,0.97) 0%,rgba(8,14,6,0.0) 100%);
+  display:flex; align-items:center; justify-content:space-between;
+  padding:0 16px; z-index:10; pointer-events:none;
+  border-bottom:1px solid rgba(80,160,60,0.2);
+}
+#res-display { display:flex; gap:20px; }
+.res-item { display:flex; align-items:center; gap:6px; color:#a8e87f; font-size:14px; text-shadow:0 0 8px rgba(120,220,80,0.6); }
+.res-icon { font-size:16px; }
+#game-title { font-family:'Orbitron',sans-serif; font-size:13px; font-weight:900; color:#5ecb30; letter-spacing:4px; text-shadow:0 0 12px rgba(80,200,40,0.8); }
+#wave-display { color:#f0c040; font-size:12px; text-shadow:0 0 8px rgba(240,180,40,0.6); }
+
+/* BOTTOM HUD */
+#hud-bottom {
+  position:fixed; bottom:0; left:0; right:0; height:110px;
+  background:linear-gradient(0deg,rgba(6,10,5,0.97) 0%,rgba(6,10,5,0.0) 100%);
+  display:flex; align-items:flex-end; gap:8px; padding:0 12px 10px;
+  z-index:10; border-top:1px solid rgba(80,160,60,0.15);
+}
+
+/* SELECTION INFO */
+#selection-info {
+  display:flex; align-items:center; gap:8px;
+  background:rgba(10,18,8,0.85); border:1px solid rgba(80,160,60,0.3);
+  border-radius:4px; padding:8px; min-width:160px; height:90px;
+}
+#sel-portrait {
+  width:56px; height:56px; background:rgba(20,32,16,0.8);
+  border:1px solid rgba(80,160,60,0.4); border-radius:3px;
+  display:flex; align-items:center; justify-content:center; font-size:28px; flex-shrink:0;
+}
+#sel-stats { color:#8fcf70; font-size:11px; line-height:1.7; }
+
+/* ACTION BAR */
+#action-bar {
+  display:flex; gap:6px; align-items:flex-end;
+}
+.action-btn {
+  background:rgba(12,22,10,0.9); border:1px solid rgba(80,160,60,0.4);
+  border-radius:4px; padding:6px 10px; color:#8fcf70; cursor:pointer;
+  display:flex; flex-direction:column; align-items:center; gap:2px;
+  min-width:70px; height:80px; justify-content:center;
+  transition:all 0.15s; font-family:'Share Tech Mono',monospace;
+}
+.action-btn:hover, .action-btn:active {
+  background:rgba(60,120,30,0.4); border-color:#5ecb30;
+  box-shadow:0 0 8px rgba(80,200,40,0.3);
+}
+.btn-icon { font-size:22px; }
+.btn-label { font-size:10px; color:#6aaf50; }
+.btn-cost { font-size:10px; color:#f0c040; }
+
+/* MINIMAP */
+#minimap-container {
+  margin-left:auto; position:relative;
+  border:1px solid rgba(80,160,60,0.4); border-radius:3px; overflow:hidden;
+}
+#minimap { display:block; width:130px; height:90px; }
+
+/* STATUS */
+#status-msg {
+  position:fixed; top:56px; left:50%; transform:translateX(-50%);
+  color:#f0c040; font-size:13px; text-align:center; z-index:10;
+  pointer-events:none; text-shadow:0 0 8px rgba(240,180,40,0.8);
+  background:rgba(8,14,6,0.75); padding:4px 14px; border-radius:3px;
+  border:1px solid rgba(240,180,40,0.2); opacity:0; transition:opacity 0.3s;
+}
+#status-msg.show { opacity:1; }
+
+/* GAME OVER */
+#game-over {
+  position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:20;
+  display:flex; align-items:center; justify-content:center;
+}
+#game-over-inner { text-align:center; }
+#game-over-title {
+  font-family:'Orbitron',sans-serif; font-size:48px; font-weight:900;
+  color:#ff3c20; text-shadow:0 0 30px rgba(255,60,32,0.8); margin-bottom:12px;
+  letter-spacing:6px;
+}
+#game-over-sub { color:#a06050; font-size:14px; margin-bottom:32px; }
+#restart-btn {
+  background:none; border:2px solid #5ecb30; color:#5ecb30;
+  font-family:'Orbitron',sans-serif; font-size:14px; font-weight:700;
+  letter-spacing:3px; padding:14px 36px; cursor:pointer; border-radius:3px;
+  text-shadow:0 0 8px rgba(80,200,40,0.6);
+  transition:all 0.2s;
+}
+#restart-btn:hover { background:rgba(80,200,40,0.15); box-shadow:0 0 20px rgba(80,200,40,0.4); }
