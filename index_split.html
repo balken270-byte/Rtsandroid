@@ -38,7 +38,7 @@
 const HULL="assets/images/hull.png";
 const TURRET="assets/images/turret.png";
 const FACTORY="assets/images/factory.png";
-const TPX=0.495;const TPY=0.670;const SOCKET_Y=0.634;const HULL_W=351;const HULL_H=645;const TUR_W=287;const TUR_H=697;const FAC_W=1333;const FAC_H=686;
+const TPX=0.495;const TPY=0.670;const SOCKET_Y=0.634;const HULL_W=351;const HULL_H=645;const TUR_W=287;const TUR_H=697;const FAC_W=867;const FAC_H=959;
 const GROUND="assets/images/ground.png";
 const EHULL="assets/images/ehull.png";
 const ETURRET="assets/images/eturret.png";
@@ -1066,7 +1066,8 @@ function drawTankWorld(t){
 function drawFactory(){
   const [sx,sy]=w2s(factory.x,factory.y);const z=cam.zoom;
   const fw=FAC_W*FAC_SCALE*z,fh=FAC_H*FAC_SCALE*z;
-  // (Kışla gölgesi kaldırıldı)
+  // kuş bakışı bina: ortadan çiz, hafif zemin gölgesi
+  ctx.save();ctx.globalAlpha=0.22;ctx.fillStyle='#000';ctx.beginPath();ctx.ellipse(sx,sy+fh*0.05,fw*0.52,fh*0.50,0,0,Math.PI*2);ctx.fill();ctx.restore();
   if(facImg.complete){ctx.save();ctx.globalAlpha=1;ctx.globalCompositeOperation="source-over";ctx.drawImage(facImg,sx-fw/2,sy-fh/2,fw,fh);ctx.restore();}
   if(factory.selected){ctx.strokeStyle='#7fff9f';ctx.lineWidth=2;ctx.setLineDash([8,5]);ctx.strokeRect(sx-fw/2,sy-fh/2,fw,fh);ctx.setLineDash([]);
     // toplanma noktası çizgisi
@@ -1106,6 +1107,7 @@ function draw(){
   drawFactory();
   // DÜŞMAN KIŞLASI
   {const [ex,ey]=w2s(enemyFactory.x,enemyFactory.y);const fw=FAC_W*FAC_SCALE*z,fh=FAC_H*FAC_SCALE*z;
+   ctx.save();ctx.globalAlpha=0.22;ctx.fillStyle='#000';ctx.beginPath();ctx.ellipse(ex,ey+fh*0.05,fw*0.52,fh*0.50,0,0,Math.PI*2);ctx.fill();ctx.restore();
    if(facImg.complete){ctx.save();ctx.globalAlpha=1;ctx.globalCompositeOperation="source-over";ctx.filter='hue-rotate(300deg) saturate(1.3)';ctx.drawImage(facImg,ex-fw/2,ey-fh/2,fw,fh);ctx.filter='none';ctx.restore();}}
   for(const wr of wrecks){const[x,y]=w2s(wr.x,wr.y);
     ctx.globalAlpha=Math.min(1,wr.fade)*0.3;ctx.fillStyle='#1a160f';ctx.beginPath();ctx.ellipse(x,y,HULL_W*SCALE*z*0.45,HULL_H*SCALE*z*0.4,0,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;
