@@ -19,7 +19,7 @@
   #pauseOverlay.show { display:flex; }
   #pauseOverlay h1 { font-size:28px; }
   #pauseOverlay button { background:#2c6fa3; color:#fff; border:none; border-radius:12px; padding:14px 32px; font-size:18px; }
-</style></head><body><div id="hud">RTS <b>v4.37</b> — Orijinal tank (çalışan sürüm).</div>
+</style></head><body><div id="hud">RTS <b>v4.37</b> — Orijinal tank · <b>build 1</b></div>
 <div id="build">
   <button id="bTank" class="active">🔧 Tank (100)</button>
   <button id="bHeli">🚁 Heli (150)</button>
@@ -1066,8 +1066,16 @@ function drawTankWorld(t){
 function drawFactory(){
   const [sx,sy]=w2s(factory.x,factory.y);const z=cam.zoom;
   const fw=FAC_W*FAC_SCALE*z,fh=FAC_H*FAC_SCALE*z;
-  // kuş bakışı bina: ortadan çiz, hafif zemin gölgesi
-  ctx.save();ctx.globalAlpha=0.22;ctx.fillStyle='#000';ctx.beginPath();ctx.ellipse(sx,sy+fh*0.05,fw*0.52,fh*0.50,0,0,Math.PI*2);ctx.fill();ctx.restore();
+  // gerçekçi yön gölgesi: ışık soldan, gölge sağ-alta düşer
+  if(facImg.complete){
+    if(!window._facShadow){ // gölge silüetini bir kez hazırla (siyah versiyon)
+      const c=document.createElement('canvas');c.width=facImg.naturalWidth;c.height=facImg.naturalHeight;
+      const cc=c.getContext('2d');cc.drawImage(facImg,0,0);cc.globalCompositeOperation='source-in';cc.fillStyle='#000';cc.fillRect(0,0,c.width,c.height);
+      window._facShadow=c;
+    }
+    const ox=fw*0.04, oy=fh*0.05;
+    ctx.save();ctx.globalAlpha=0.33;ctx.drawImage(window._facShadow,sx-fw/2+ox,sy-fh/2+oy,fw,fh);ctx.restore();
+  }
   if(facImg.complete){ctx.save();ctx.globalAlpha=1;ctx.globalCompositeOperation="source-over";ctx.drawImage(facImg,sx-fw/2,sy-fh/2,fw,fh);ctx.restore();}
   if(factory.selected){ctx.strokeStyle='#7fff9f';ctx.lineWidth=2;ctx.setLineDash([8,5]);ctx.strokeRect(sx-fw/2,sy-fh/2,fw,fh);ctx.setLineDash([]);
     // toplanma noktası çizgisi
@@ -1107,7 +1115,7 @@ function draw(){
   drawFactory();
   // DÜŞMAN KIŞLASI
   {const [ex,ey]=w2s(enemyFactory.x,enemyFactory.y);const fw=FAC_W*FAC_SCALE*z,fh=FAC_H*FAC_SCALE*z;
-   ctx.save();ctx.globalAlpha=0.22;ctx.fillStyle='#000';ctx.beginPath();ctx.ellipse(ex,ey+fh*0.05,fw*0.52,fh*0.50,0,0,Math.PI*2);ctx.fill();ctx.restore();
+   if(facImg.complete&&window._facShadow){const ox=fw*0.04,oy=fh*0.05;ctx.save();ctx.globalAlpha=0.33;ctx.drawImage(window._facShadow,ex-fw/2+ox,ey-fh/2+oy,fw,fh);ctx.restore();}
    if(facImg.complete){ctx.save();ctx.globalAlpha=1;ctx.globalCompositeOperation="source-over";ctx.filter='hue-rotate(300deg) saturate(1.3)';ctx.drawImage(facImg,ex-fw/2,ey-fh/2,fw,fh);ctx.filter='none';ctx.restore();}}
   for(const wr of wrecks){const[x,y]=w2s(wr.x,wr.y);
     ctx.globalAlpha=Math.min(1,wr.fade)*0.3;ctx.fillStyle='#1a160f';ctx.beginPath();ctx.ellipse(x,y,HULL_W*SCALE*z*0.45,HULL_H*SCALE*z*0.4,0,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;
