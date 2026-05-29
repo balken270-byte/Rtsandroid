@@ -19,7 +19,7 @@
   #pauseOverlay.show { display:flex; }
   #pauseOverlay h1 { font-size:28px; }
   #pauseOverlay button { background:#2c6fa3; color:#fff; border:none; border-radius:12px; padding:14px 32px; font-size:18px; }
-</style></head><body><div id="hud">RTS <b>v4.37</b> — Orijinal tank · <b>build 5</b></div>
+</style></head><body><div id="hud">RTS <b>v4.37</b> — Orijinal tank · <b>build 6</b></div>
 <div id="build">
   <button id="bTank" class="active">🔧 Tank (100)</button>
   <button id="bHeli">🚁 Heli (150)</button>
@@ -1093,7 +1093,7 @@ function draw(){
   const z=cam.zoom;
   // ZEMİN TEXTURE - iki katman blend (tekrar deseni gizlenir)
   if(groundPattern){
-    ctx.fillStyle='#4f5a3a';ctx.fillRect(0,0,VW,VH);
+    ctx.fillStyle='#3a3228';ctx.fillRect(0,0,VW,VH);
     // KATMAN 1: ana tile (büyük)
     const ts1=GROUND_TILE*GROUND_SCALE*z;
     const sx1=-((cam.x*z)%ts1), sy1=-((cam.y*z)%ts1);
@@ -1112,7 +1112,7 @@ function draw(){
       }
     }
     ctx.restore();
-  } else { ctx.fillStyle='#4f5a3a';ctx.fillRect(0,0,VW,VH); }
+  } else { ctx.fillStyle='#3a3228';ctx.fillRect(0,0,VW,VH); }
   // ızgara kaldırıldı (texture zemin var)
   const [bx,by]=w2s(0,0);ctx.strokeStyle='rgba(255,255,255,0.15)';ctx.lineWidth=3;ctx.strokeRect(bx,by,MAP_W*z,MAP_H*z);
   for(const tr of tracks){const[x,y]=w2s(tr.x,tr.y);ctx.save();ctx.translate(x,y);ctx.rotate(tr.a+Math.PI/2);ctx.fillStyle=`rgba(20,18,12,${tr.life*0.22})`;ctx.fillRect(-18*z,-3*z,6*z,6*z);ctx.fillRect(12*z,-3*z,6*z,6*z);ctx.restore();}
