@@ -19,7 +19,7 @@
   #pauseOverlay.show { display:flex; }
   #pauseOverlay h1 { font-size:28px; }
   #pauseOverlay button { background:#2c6fa3; color:#fff; border:none; border-radius:12px; padding:14px 32px; font-size:18px; }
-</style></head><body><div id="hud">RTS <b>v4.37</b> — Orijinal tank · <b>build 3</b></div>
+</style></head><body><div id="hud">RTS <b>v4.37</b> — Orijinal tank · <b>build 4</b></div>
 <div id="build">
   <button id="bTank" class="active">🔧 Tank (100)</button>
   <button id="bHeli">🚁 Heli (150)</button>
@@ -35,56 +35,56 @@
 <div id="pauseOverlay"><h1>⏸ Oyun Durdu</h1><button id="bResume">▶ Devam Et</button></div>
 <div id="status"></div><canvas id="game"></canvas><script>
 
-const HULL="assets/images/hull.png";
-const TURRET="assets/images/turret.png";
-const FACTORY="assets/images/factory.png";
+const HULL="assets/images/tank/hull.png";
+const TURRET="assets/images/tank/turret.png";
+const FACTORY="assets/images/building/factory.png";
 const TPX=0.495;const TPY=0.670;const SOCKET_Y=0.634;const HULL_W=351;const HULL_H=645;const TUR_W=287;const TUR_H=697;const FAC_W=867;const FAC_H=959;
-const GROUND="assets/images/ground.png";
-const EHULL="assets/images/ehull.png";
-const ETURRET="assets/images/eturret.png";
+const GROUND="assets/images/building/ground.png";
+const EHULL="assets/images/enemy/ehull.png";
+const ETURRET="assets/images/enemy/eturret.png";
 const ETPX=0.491;const ETPY=0.567;const EHULL_W=354;const EHULL_H=653;const ETUR_W=293;const ETUR_H=702;
 const SND_ENGINE="assets/sounds/snd_engine.mp3";
 const SND_SHOT="assets/sounds/snd_shot.mp3";
-const HELI="assets/images/heli.png";
-const CH47="assets/images/ch47.png";
-const CH47_ROTOR="assets/images/ch47_rotor.png";
-const ROTOR="assets/images/rotor.png";
+const HELI="assets/images/aircraft/heli.png";
+const CH47="assets/images/aircraft/ch47.png";
+const CH47_ROTOR="assets/images/aircraft/ch47_rotor.png";
+const ROTOR="assets/images/aircraft/rotor.png";
 const HELI_W=487;const HELI_H=1267;const ROTOR_W=576;const ROTOR_H=580;const HUB_X=0.495;const HUB_Y=0.34;
 
 
 
-const SLD_DEATH_01="assets/images/sld_death_01.png";
-const SLD_DEATH_02="assets/images/sld_death_02.png";
-const SLD_DEATH_03="assets/images/sld_death_03.png";
-const SLD_IDLE_01="assets/images/sld_idle_01.png";
-const SLD_SHOOT_01="assets/images/sld_shoot_01.png";
-const SLD_SHOOT_02="assets/images/sld_shoot_02.png";
-const SLD_SHOOT_03="assets/images/sld_shoot_03.png";
-const SLD_SHOOT_04="assets/images/sld_shoot_04.png";
-const SLD_WALKD_01="assets/images/sld_walkd_01.png";
-const SLD_WALKD_02="assets/images/sld_walkd_02.png";
-const SLD_WALKD_03="assets/images/sld_walkd_03.png";
-const SLD_WALKD_04="assets/images/sld_walkd_04.png";
-const SLD_WALKD_05="assets/images/sld_walkd_05.png";
-const SLD_WALKD_06="assets/images/sld_walkd_06.png";
-const SLD_WALKD_07="assets/images/sld_walkd_07.png";
-const SLD_WALKD_08="assets/images/sld_walkd_08.png";
-const SLD_WALKR_01="assets/images/sld_walkr_01.png";
-const SLD_WALKR_02="assets/images/sld_walkr_02.png";
-const SLD_WALKR_03="assets/images/sld_walkr_03.png";
-const SLD_WALKR_04="assets/images/sld_walkr_04.png";
-const SLD_WALKR_05="assets/images/sld_walkr_05.png";
-const SLD_WALKR_06="assets/images/sld_walkr_06.png";
-const SLD_WALKR_07="assets/images/sld_walkr_07.png";
-const SLD_WALKR_08="assets/images/sld_walkr_08.png";
-const SLD_WALKU_01="assets/images/sld_walku_01.png";
-const SLD_WALKU_02="assets/images/sld_walku_02.png";
-const SLD_WALKU_03="assets/images/sld_walku_03.png";
-const SLD_WALKU_04="assets/images/sld_walku_04.png";
-const SLD_WALKU_05="assets/images/sld_walku_05.png";
-const SLD_WALKU_06="assets/images/sld_walku_06.png";
-const SLD_WALKU_07="assets/images/sld_walku_07.png";
-const SLD_WALKU_08="assets/images/sld_walku_08.png";
+const SLD_DEATH_01="assets/images/soldier/sld_death_01.png";
+const SLD_DEATH_02="assets/images/soldier/sld_death_02.png";
+const SLD_DEATH_03="assets/images/soldier/sld_death_03.png";
+const SLD_IDLE_01="assets/images/soldier/sld_idle_01.png";
+const SLD_SHOOT_01="assets/images/soldier/sld_shoot_01.png";
+const SLD_SHOOT_02="assets/images/soldier/sld_shoot_02.png";
+const SLD_SHOOT_03="assets/images/soldier/sld_shoot_03.png";
+const SLD_SHOOT_04="assets/images/soldier/sld_shoot_04.png";
+const SLD_WALKD_01="assets/images/soldier/sld_walkd_01.png";
+const SLD_WALKD_02="assets/images/soldier/sld_walkd_02.png";
+const SLD_WALKD_03="assets/images/soldier/sld_walkd_03.png";
+const SLD_WALKD_04="assets/images/soldier/sld_walkd_04.png";
+const SLD_WALKD_05="assets/images/soldier/sld_walkd_05.png";
+const SLD_WALKD_06="assets/images/soldier/sld_walkd_06.png";
+const SLD_WALKD_07="assets/images/soldier/sld_walkd_07.png";
+const SLD_WALKD_08="assets/images/soldier/sld_walkd_08.png";
+const SLD_WALKR_01="assets/images/soldier/sld_walkr_01.png";
+const SLD_WALKR_02="assets/images/soldier/sld_walkr_02.png";
+const SLD_WALKR_03="assets/images/soldier/sld_walkr_03.png";
+const SLD_WALKR_04="assets/images/soldier/sld_walkr_04.png";
+const SLD_WALKR_05="assets/images/soldier/sld_walkr_05.png";
+const SLD_WALKR_06="assets/images/soldier/sld_walkr_06.png";
+const SLD_WALKR_07="assets/images/soldier/sld_walkr_07.png";
+const SLD_WALKR_08="assets/images/soldier/sld_walkr_08.png";
+const SLD_WALKU_01="assets/images/soldier/sld_walku_01.png";
+const SLD_WALKU_02="assets/images/soldier/sld_walku_02.png";
+const SLD_WALKU_03="assets/images/soldier/sld_walku_03.png";
+const SLD_WALKU_04="assets/images/soldier/sld_walku_04.png";
+const SLD_WALKU_05="assets/images/soldier/sld_walku_05.png";
+const SLD_WALKU_06="assets/images/soldier/sld_walku_06.png";
+const SLD_WALKU_07="assets/images/soldier/sld_walku_07.png";
+const SLD_WALKU_08="assets/images/soldier/sld_walku_08.png";
 
 // Asker animasyon dizileri
 const SLD_ANIMS={
@@ -1066,10 +1066,6 @@ function drawTankWorld(t){
 function drawFactory(){
   const [sx,sy]=w2s(factory.x,factory.y);const z=cam.zoom;
   const fw=FAC_W*FAC_SCALE*z,fh=FAC_H*FAC_SCALE*z;
-  // temas gölgesi: binanın tabanına oturan yumuşak koyu leke (zemine gömülme hissi)
-  ctx.save();ctx.globalAlpha=0.30;ctx.fillStyle='#000';ctx.filter='blur('+(8*z)+'px)';
-  ctx.beginPath();ctx.ellipse(sx,sy+fh*0.02,fw*0.46,fh*0.46,0,0,Math.PI*2);ctx.fill();
-  ctx.filter='none';ctx.restore();
   // gerçekçi yön gölgesi: ışık soldan, gölge sağ-alta düşer
   if(facImg.complete){
     if(!window._facShadow){ // gölge silüetini bir kez hazırla (siyah versiyon)
@@ -1119,7 +1115,6 @@ function draw(){
   drawFactory();
   // DÜŞMAN KIŞLASI
   {const [ex,ey]=w2s(enemyFactory.x,enemyFactory.y);const fw=FAC_W*FAC_SCALE*z,fh=FAC_H*FAC_SCALE*z;
-   ctx.save();ctx.globalAlpha=0.30;ctx.fillStyle='#000';ctx.filter='blur('+(8*z)+'px)';ctx.beginPath();ctx.ellipse(ex,ey+fh*0.02,fw*0.46,fh*0.46,0,0,Math.PI*2);ctx.fill();ctx.filter='none';ctx.restore();
    if(facImg.complete&&window._facShadow){const ox=fw*0.04,oy=fh*0.05;ctx.save();ctx.globalAlpha=0.33;ctx.drawImage(window._facShadow,ex-fw/2+ox,ey-fh/2+oy,fw,fh);ctx.restore();}
    if(facImg.complete){ctx.save();ctx.globalAlpha=1;ctx.globalCompositeOperation="source-over";ctx.filter='hue-rotate(300deg) saturate(1.3)';ctx.drawImage(facImg,ex-fw/2,ey-fh/2,fw,fh);ctx.filter='none';ctx.restore();}}
   for(const wr of wrecks){const[x,y]=w2s(wr.x,wr.y);
