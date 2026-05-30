@@ -359,14 +359,14 @@ const enemyFactory={x:MAP_W-700,y:MAP_H-900,w:FAC_W*FAC_SCALE,h:FAC_H*FAC_SCALE,
 // Ussun yaninda, tam askeri havalimani (pist + hangar + helipad)
 const AIRPORT_IMG="assets/images/building/airport.png";
 const airportImg=new Image();airportImg.src=AIRPORT_IMG;
-const AIRPORT_W=900, AIRPORT_H=463; // dunya px (gorsel orani 1.94:1)
-const airport={x:1200, y:1850, w:AIRPORT_W, h:AIRPORT_H, buildQueue:[], buildTimer:0, selected:false, pads:[]};
-// Ped konumlari gorseldeki "H" isaretlerine gore (rel: x=0.585/0.662/0.738, y=0.415)
+const AIRPORT_W=1600, AIRPORT_H=763; // dunya px (gorsel orani 2.096:1) - buyuk
+const airport={x:1700, y:2300, w:AIRPORT_W, h:AIRPORT_H, buildQueue:[], buildTimer:0, selected:false, pads:[]};
+// Ped konumlari gorseldeki "H" isaretlerine gore (rel: x=0.600/0.675/0.752, y=0.42)
 function _initAirportPads(){
   airport.pads=[
-    {x:airport.x+(0.585-0.5)*airport.w, y:airport.y+(0.415-0.5)*airport.h, occupied:false},
-    {x:airport.x+(0.662-0.5)*airport.w, y:airport.y+(0.415-0.5)*airport.h, occupied:false},
-    {x:airport.x+(0.738-0.5)*airport.w, y:airport.y+(0.415-0.5)*airport.h, occupied:false},
+    {x:airport.x+(0.600-0.5)*airport.w, y:airport.y+(0.42-0.5)*airport.h, occupied:false},
+    {x:airport.x+(0.675-0.5)*airport.w, y:airport.y+(0.42-0.5)*airport.h, occupied:false},
+    {x:airport.x+(0.752-0.5)*airport.w, y:airport.y+(0.42-0.5)*airport.h, occupied:false},
   ];
 }
 _initAirportPads();
@@ -590,7 +590,17 @@ canvas.addEventListener('pointerup',e=>{
       } else {
         let tap=null, tapEnemy=null;
         for(const t of tanks){if(t.alive&&hit(wx,wy,t)){if(t.team==='player')tap=t;else tapEnemy=t;}}
-        if(tap){tanks.forEach(t=>t.selected=false);factory.selected=false;tap.selected=true;burst(tap.x,tap.y,'#7fff9f',10);}
+        if(tap){
+          // Eger dokunulan bir CH-47 ise VE secili kara birimleri varsa: onlari bindir
+          const sel=tanks.filter(t=>t.selected&&t.alive&&t!==tap);
+          const groundSel=sel.filter(t=>t.unitType==='tank'||t.unitType==='soldier'||t.unitType==='bradley');
+          if(tap.unitType==='chinook' && groundSel.length>0){
+            groundSel.forEach(t=>{t.tx=tap.x+(Math.random()-0.5)*60;t.ty=tap.y+(Math.random()-0.5)*60;t.hasOrder=true;t.focusTarget=null;t.homeX=t.tx;t.homeY=t.ty;});
+            flashStatus('🚶 Birlikler CH-47\'ye biniyor...');burst(tap.x,tap.y,'#9fcfff',10);
+          } else {
+            tanks.forEach(t=>t.selected=false);factory.selected=false;airport.selected=false;tap.selected=true;burst(tap.x,tap.y,'#7fff9f',10);
+          }
+        }
         else if(tapEnemy){
           // DÜŞMANA DOKUNULDU: seçili birimleri ona KİLİTLE (saldırı emri)
           const sel=tanks.filter(t=>t.selected&&t.alive);
@@ -807,8 +817,15 @@ function update(){
       // CH-47 CHINOOK: silahsız nakliye, durunca yere iner
       t.rotorAngle+=t.rotorSpeed; t.rotor2Angle-=t.rotorSpeed;
       t.bobPhase+=t.altitude>5?0.05:0; // havada bob, yerde dur
-      const moving=dd>t.speed+8;
-      if(moving){
+      // OYUNCU CH-47 idle/returning-bitti ise: PISTTE SABIT KAL (havalanma)
+      const isPlayerIdle = t.team==='player' && t.chMode==='idle';
+      const moving = !isPlayerIdle && dd>t.speed+8;
+      if(isPlayerIdle){
+        // pistte park: yere in, rotor yavas, hareket yok
+        t.targetAltitude=0;
+        t.rotorSpeed+=(0.22-t.rotorSpeed)*0.04;
+        t.tx=t.x;t.ty=t.y; // hedefi kendine sabitle (carpisma itse bile havalanma)
+      } else if(moving){
         // KALKIŞ: havalan
         t.targetAltitude=100;
         t.rotorSpeed+=(1.8-t.rotorSpeed)*0.05; // hızlanan rotor (havada)
@@ -823,7 +840,7 @@ function update(){
         }
       } else {
         // İNİŞ: durunca yere in
-        t.hasOrder=false;
+        if(t.team!=='player')t.hasOrder=false;
         t.targetAltitude=0;
         if(t.altitude<=2)t.rotorSpeed+=(0.25-t.rotorSpeed)*0.03; // yerde rotor yavaşlar
         else t.rotorSpeed+=(1.8-t.rotorSpeed)*0.05;
@@ -1012,7 +1029,13 @@ function update(){
       const bothChinook=aC&&bC;
       // chinook tank/heliyle çarpışmaz (havada, farklı yükseklik)
       if(oneChinook && !bothChinook && !bothHeli){if(!(aC&&bC))continue;} // chinook sadece chinook ile
-      const minD=bothChinook?STATS.radius*5.5 : bothHeli?STATS.radius*4.2 : (aS&&bS)?STATS.radius*0.9 : (aS||bS)?STATS.radius*1.2 : STATS.radius*2;
+      // PISTTE park etmis (idle) CH-47'ler birbirini itmesin
+      if(bothChinook){
+        const aIdle=a.team==='player'&&a.chMode==='idle';
+        const bIdle=b.team==='player'&&b.chMode==='idle';
+        if(aIdle||bIdle)continue;
+      }
+      const minD=bothChinook?STATS.radius*4.5 : bothHeli?STATS.radius*4.2 : (aS&&bS)?STATS.radius*0.9 : (aS||bS)?STATS.radius*1.2 : STATS.radius*2;
       if(d<minD&&d>0.1){const push=(minD-d)/2*(bothHeli?1.0:1.2),nx=dx/d,ny=dy/d;a.x-=nx*push;a.y-=ny*push;b.x+=nx*push;b.y+=ny*push;}}}
   for(const t of tanks){t.x=Math.max(20,Math.min(MAP_W-20,t.x));t.y=Math.max(20,Math.min(MAP_H-20,t.y));}
   // Kışla çarpışması
@@ -1089,7 +1112,7 @@ function update(){
       if(!u.alive||u.team!=='player'||u===ch)continue;
       if(u.unitType==='chinook'||u.unitType==='heli')continue; // hava birimleri binmez
       const d=Math.hypot(u.x-ch.x,u.y-ch.y);
-      if(d<110 && ch.cargo.length<ch.maxCargo){
+      if(d<130 && ch.cargo.length<ch.maxCargo){
         ch.cargo.push({type:u.unitType,hp:u.hp,maxHp:u.maxHp});
         u.alive=false; u.deadTimer=999;
         if(typeof flashStatus==='function')flashStatus('🚁 Yolcu alındı ('+ch.cargo.length+'/'+ch.maxCargo+')');
