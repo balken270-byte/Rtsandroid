@@ -352,6 +352,42 @@ window.addEventListener('load',()=>{
 const factory={x:700,y:900, w:FAC_W*FAC_SCALE, h:FAC_H*FAC_SCALE, buildQueue:[], buildTimer:0, selected:false, rallyX:700, rallyY:1300};
 const enemyFactory={x:MAP_W-700,y:MAP_H-900,w:FAC_W*FAC_SCALE,h:FAC_H*FAC_SCALE,spawnTimer:0,resources:200};
 
+// === ENGELLER (kaya/su/agac) ===
+// kaya: mermi+birim engeli (siper). su: kara giremez, heli/CH47 gecer. agac: yavaslatir+birim engeli
+let obstacles=[];
+function genObstacles(){
+  obstacles=[];
+  const types=['rock','water','tree'];
+  // ust ussu (700,900) ve dusman ussu (MAP_W-700,MAP_H-900) cevresini bos birak
+  const safe=(x,y)=>{
+    if(Math.hypot(x-factory.x,y-factory.y)<1200)return false;
+    if(Math.hypot(x-enemyFactory.x,y-enemyFactory.y)<1200)return false;
+    return true;
+  };
+  const counts={rock:18, water:6, tree:14};
+  for(const type of types){
+    let placed=0, tries=0;
+    while(placed<counts[type] && tries<400){
+      tries++;
+      const x=300+Math.random()*(MAP_W-600);
+      const y=300+Math.random()*(MAP_H-600);
+      if(!safe(x,y))continue;
+      // boyut: su buyuk goller, kaya orta, agac kucuk kumeler
+      let r;
+      if(type==='water')r=260+Math.random()*220;
+      else if(type==='rock')r=70+Math.random()*90;
+      else r=90+Math.random()*70; // tree (kumelenmis)
+      // baska engelle cok cakisma
+      let ok=true;
+      for(const o of obstacles){if(Math.hypot(o.x-x,o.y-y)<o.r+r+40){ok=false;break;}}
+      if(!ok)continue;
+      obstacles.push({x,y,r,type,seed:Math.random()*1000});
+      placed++;
+    }
+  }
+}
+
+
 function makeTank(x,y,team){
   return {x,y,tx:x,ty:y,team,unitType:'tank',hp:STATS.maxHp,maxHp:STATS.maxHp,
     hullAngle:team==='player'?Math.PI/2:Math.PI/2,turretAngle:team==='player'?Math.PI/2:-Math.PI/2,
@@ -408,6 +444,7 @@ let tanks=[];const wrecks=[];let waveNum=0,waveTimer=400;
 function setup(){
   tanks=[];wrecks.length=0;resources=1000;waveNum=0;waveTimer=400;
   factory.buildQueue=[];factory.buildTimer=0;
+  genObstacles();
   for(let i=0;i<3;i++)tanks.push(makeTank(800+(i%2)*80,1100+Math.floor(i/2)*100,'player'));
   spawnEnemyWave(2);
   cam.x=300;cam.y=600;clampCam();
@@ -728,7 +765,22 @@ function update(){
         }
       }
     }
-    const dx=t.tx-t.x,dy=t.ty-t.y,dd=Math.hypot(dx,dy);
+    // ENGEL KAÇINMA (kara birimleri): yoldaki engele yaklasinca hedefi yana kaydir
+    let gx=t.tx, gy=t.ty;
+    if(t.unitType!=='heli'&&t.unitType!=='chinook'&&t.hasOrder){
+      let ax=0,ay=0;
+      for(const o of obstacles){
+        const odx=t.x-o.x, ody=t.y-o.y, od=Math.hypot(odx,ody);
+        const danger=o.r+STATS.radius+60;
+        if(od<danger && od>0.1){
+          const force=(danger-od)/danger;
+          ax+=(odx/od)*force; ay+=(ody/od)*force;
+        }
+      }
+      // kacinma vektorunu GECICI hedefe ekle (gercek tx/ty bozulmaz)
+      gx=t.tx+ax*120; gy=t.ty+ay*120;
+    }
+    const dx=gx-t.x,dy=gy-t.y,dd=Math.hypot(dx,dy);
     if(t.unitType==='chinook'){
       // CH-47 CHINOOK: silahsız nakliye, durunca yere iner
       t.rotorAngle+=t.rotorSpeed; t.rotor2Angle-=t.rotorSpeed;
@@ -952,6 +1004,28 @@ function update(){
         const m=Math.min(dL,dR,dT,dB);
         if(m===dL)t.x=L;else if(m===dR)t.x=R;else if(m===dT)t.y=T;else t.y=B;
       }
+    }
+  }
+  // ENGEL çarpışması (kaya/su/agac) - sadece KARA birimleri (heli/CH47 ucar, gecer)
+  for(const t of tanks){
+    if(!t.alive)continue;
+    if(t.unitType==='heli'||t.unitType==='chinook')continue; // hava birimleri engelleri asar
+    for(const o of obstacles){
+      const minD=o.r+STATS.radius;
+      const dx=t.x-o.x, dy=t.y-o.y, d=Math.hypot(dx,dy);
+      if(d<minD && d>0.1){
+        // disari it
+        const push=(minD-d), nx=dx/d, ny=dy/d;
+        t.x+=nx*push; t.y+=ny*push;
+      }
+    }
+  }
+  // mermi kayaya carparsa durur (siper)
+  for(const b of bullets){
+    if(b.life<=0)continue;
+    for(const o of obstacles){
+      if(o.type!=='rock')continue; // sadece kaya mermiyi durdurur
+      if(Math.hypot(b.x-o.x,b.y-o.y)<o.r){b.life=0;burst(b.x,b.y,'#bbb',5,2);break;}
     }
   }
   for(const b of bullets){b.x+=b.vx;b.y+=b.vy;b.life--;if(time%4===0)smoke(b.x,b.y,false);for(const t of tanks){if(t.alive&&t.team!==b.team&&dist(b.x,b.y,t.x,t.y)<STATS.radius+4){
@@ -1278,6 +1352,66 @@ function drawTankWorld(t){
   const bw=40*z,bh=4*z,by=sy-hh*0.42-8*z;ctx.fillStyle='rgba(0,0,0,0.5)';ctx.fillRect(sx-bw/2,by,bw,bh);
   const r=Math.max(0,t.hp/t.maxHp);ctx.fillStyle=r>0.5?'#5cff7a':r>0.25?'#ffd27f':'#ff5c3a';ctx.fillRect(sx-bw/2,by,bw*r,bh);
 }
+function drawObstacles(){
+  const z=cam.zoom;
+  for(const o of obstacles){
+    const [sx,sy]=w2s(o.x,o.y);
+    const r=o.r*z;
+    // ekran disindaysa atla (performans)
+    if(sx<-r-50||sx>VW+r+50||sy<-r-50||sy>VH+r+50)continue;
+    const rnd=(n)=>{const s=Math.sin(o.seed*12.9898+n*78.233)*43758.5453;return s-Math.floor(s);};
+    if(o.type==='water'){
+      // SU: koyu mavi-yesil gol, hafif dalga halkalari
+      ctx.save();
+      ctx.beginPath();ctx.ellipse(sx,sy,r,r*0.82,0,0,Math.PI*2);
+      const g=ctx.createRadialGradient(sx,sy,r*0.2,sx,sy,r);
+      g.addColorStop(0,'#2a4a5c');g.addColorStop(0.7,'#1d3a4a');g.addColorStop(1,'#16303d');
+      ctx.fillStyle=g;ctx.fill();
+      // kiyi cizgisi
+      ctx.strokeStyle='rgba(120,160,170,0.3)';ctx.lineWidth=2*z;ctx.stroke();
+      // dalga parlamasi (animasyonlu)
+      ctx.strokeStyle='rgba(150,200,210,0.18)';ctx.lineWidth=1.5*z;
+      for(let i=1;i<=2;i++){const ph=(time*0.02+i*2)%6;const rr=r*(0.3+ph*0.12);ctx.beginPath();ctx.ellipse(sx,sy,rr,rr*0.82,0,0,Math.PI*2);ctx.stroke();}
+      ctx.restore();
+    } else if(o.type==='rock'){
+      // KAYA: gri kume tasllar, golge
+      ctx.save();
+      // golge
+      ctx.fillStyle='rgba(0,0,0,0.3)';ctx.beginPath();ctx.ellipse(sx+4*z,sy+5*z,r,r*0.7,0,0,Math.PI*2);ctx.fill();
+      // ana kaya kutleleri (3-4 ortusen daire)
+      const blobs=3+Math.floor(rnd(1)*2);
+      for(let i=0;i<blobs;i++){
+        const a=rnd(i*3)*Math.PI*2, dd=rnd(i*3+1)*r*0.5;
+        const bx=sx+Math.cos(a)*dd, by=sy+Math.sin(a)*dd;
+        const br=r*(0.45+rnd(i*3+2)*0.4);
+        const shade=80+Math.floor(rnd(i*7)*50);
+        ctx.fillStyle=`rgb(${shade},${shade-5},${shade-12})`;
+        ctx.beginPath();ctx.arc(bx,by,br,0,Math.PI*2);ctx.fill();
+        // ust isik
+        ctx.fillStyle=`rgba(255,255,255,0.12)`;
+        ctx.beginPath();ctx.arc(bx-br*0.25,by-br*0.25,br*0.5,0,Math.PI*2);ctx.fill();
+      }
+      ctx.restore();
+    } else { // tree (orman kumesi)
+      ctx.save();
+      const trees=4+Math.floor(rnd(1)*3);
+      for(let i=0;i<trees;i++){
+        const a=rnd(i*5)*Math.PI*2, dd=rnd(i*5+1)*r*0.7;
+        const tx=sx+Math.cos(a)*dd, ty=sy+Math.sin(a)*dd;
+        const tr=r*(0.3+rnd(i*5+2)*0.25);
+        // golge
+        ctx.fillStyle='rgba(0,0,0,0.28)';ctx.beginPath();ctx.arc(tx+3*z,ty+4*z,tr,0,Math.PI*2);ctx.fill();
+        // agac tepesi (koyu yesil + ic acik yesil)
+        const gr=40+Math.floor(rnd(i*9)*30);
+        ctx.fillStyle=`rgb(${gr},${gr+45},${gr})`;
+        ctx.beginPath();ctx.arc(tx,ty,tr,0,Math.PI*2);ctx.fill();
+        ctx.fillStyle=`rgb(${gr+20},${gr+75},${gr+15})`;
+        ctx.beginPath();ctx.arc(tx-tr*0.2,ty-tr*0.2,tr*0.6,0,Math.PI*2);ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+}
 function drawFactory(){
   const [sx,sy]=w2s(factory.x,factory.y);const z=cam.zoom;
   const fw=FAC_W*FAC_SCALE*z,fh=FAC_H*FAC_SCALE*z;
@@ -1331,6 +1465,7 @@ function draw(){
   // ızgara kaldırıldı (texture zemin var)
   const [bx,by]=w2s(0,0);ctx.strokeStyle='rgba(255,255,255,0.15)';ctx.lineWidth=3;ctx.strokeRect(bx,by,MAP_W*z,MAP_H*z);
   for(const tr of tracks){const[x,y]=w2s(tr.x,tr.y);ctx.save();ctx.translate(x,y);ctx.rotate(tr.a+Math.PI/2);ctx.fillStyle=`rgba(20,18,12,${tr.life*0.22})`;ctx.fillRect(-18*z,-3*z,6*z,6*z);ctx.fillRect(12*z,-3*z,6*z,6*z);ctx.restore();}
+  drawObstacles();
   drawFactory();
   // DÜŞMAN KIŞLASI
   {const [ex,ey]=w2s(enemyFactory.x,enemyFactory.y);const fw=FAC_W*FAC_SCALE*z,fh=FAC_H*FAC_SCALE*z;
@@ -1430,6 +1565,12 @@ function drawMinimap(){
   // kışlalar
   ctx.fillStyle='#5cff7a';ctx.fillRect(mx+factory.x*sx-3,my+factory.y*sy-3,6,6);
   ctx.fillStyle='#ff5c5c';ctx.fillRect(mx+enemyFactory.x*sx-3,my+enemyFactory.y*sy-3,6,6);
+  // engeller (minimap)
+  for(const o of obstacles){
+    ctx.fillStyle=o.type==='water'?'rgba(40,90,120,0.8)':o.type==='rock'?'rgba(120,115,105,0.8)':'rgba(50,110,50,0.8)';
+    const rr=Math.max(1.5,o.r*sx);
+    ctx.beginPath();ctx.arc(mx+o.x*sx,my+o.y*sy,rr,0,Math.PI*2);ctx.fill();
+  }
   // birimler
   for(const t of tanks){if(!t.alive)continue;ctx.fillStyle=t.team==='player'?'#5cff7a':'#ff5c5c';ctx.fillRect(mx+t.x*sx-1.5,my+t.y*sy-1.5,3,3);}
   // kamera görüş alanı çerçevesi
