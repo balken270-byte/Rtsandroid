@@ -4,13 +4,13 @@
   #game { display:block; touch-action:none; width:100%; height:100%; }
   #hud { position:fixed; top:0; left:0; right:0; padding:8px 12px; color:#cfe8ff; font-size:11px; pointer-events:none; text-shadow:0 1px 3px #000; z-index:2;}
   #hud b { color:#7fd1ff; }
-  #status { position:fixed; bottom:0; left:0; right:0; padding:8px 12px; color:#ffd27f; font-size:12px; pointer-events:none; text-shadow:0 1px 3px #000; text-align:center; z-index:2;}
+  #status { position:fixed; bottom:62px; left:0; right:0; padding:6px 12px; color:#ffd27f; font-size:11px; pointer-events:none; text-shadow:0 1px 3px #000; text-align:center; z-index:2;}
   #ctrl { position:fixed; top:34px; right:10px; z-index:3; display:flex; gap:6px; flex-direction:column; align-items:flex-end;}
   .row { display:flex; gap:6px; }
   #ctrl button { background:rgba(20,30,40,0.85); color:#cfe8ff; border:1px solid #3a5a7a; border-radius:8px; padding:8px 12px; font-size:13px; }
   #ctrl button.active { background:#2c6fa3; border-color:#7fd1ff; }
-  #build { position:fixed; bottom:36px; left:10px; z-index:3; display:flex; gap:8px; }
-  #build button { background:rgba(20,30,40,0.9); color:#cfe8ff; border:2px solid #3a5a7a; border-radius:10px; padding:10px 14px; font-size:14px; }
+  #build { position:fixed; bottom:8px; left:0; right:0; z-index:3; display:flex; gap:4px; padding:0 6px; justify-content:space-between; }
+  #build button { background:rgba(20,30,40,0.9); color:#cfe8ff; border:1.5px solid #3a5a7a; border-radius:8px; padding:7px 2px; font-size:11px; flex:1; min-width:0; line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   #build button.active { background:#2c6fa3; border-color:#7fd1ff; color:#fff; }
   #topctrl { position:fixed; top:52px; left:10px; z-index:4; display:flex; gap:6px; }
   #topctrl button { background:rgba(20,30,40,0.9); color:#cfe8ff; border:1px solid #3a5a7a; border-radius:8px; padding:8px 11px; font-size:13px; }
@@ -21,11 +21,11 @@
   #pauseOverlay button { background:#2c6fa3; color:#fff; border:none; border-radius:12px; padding:14px 32px; font-size:18px; }
 </style></head><body><div id="hud">RTS <b>v4.37</b> — Orijinal tank · <b>build 6</b></div>
 <div id="build">
-  <button id="bTank" class="active">🔧 Tank (100)</button>
-  <button id="bHeli">🚁 Heli (150)</button>
-  <button id="bSold">🪖 Asker (50)</button>
-  <button id="bBrad">🚛 Bradley (130)</button>
-  <button id="bCh47">🚁 CH-47 (300)</button>
+  <button id="bTank" class="active">🔧 Tank<br>100</button>
+  <button id="bHeli">🚁 Heli<br>150</button>
+  <button id="bSold">🪖 Asker<br>50</button>
+  <button id="bBrad">🚛 Bradley<br>130</button>
+  <button id="bCh47">🚁 CH47<br>300</button>
   <button id="bDeploy">📦 İndir</button>
 </div>
 <div id="topctrl">
@@ -147,6 +147,7 @@ function initAudio(){
   if(!audioCtx){audioCtx=new(window.AudioContext||window.webkitAudioContext)();}
   if(audioCtx.state==='suspended'||audioCtx.state==='interrupted')audioCtx.resume();
   _loadShot();
+  _loadBradSounds();
   _initHeliSound();
 }
 // HELİKOPTER PERVANE SESİ (sürekli uğultu, heli sayısına göre)
@@ -231,6 +232,37 @@ function playShootAt(vol){
   const g=audioCtx.createGain();g.gain.value=Math.max(0,Math.min(1,vol));
   src.connect(g);g.connect(audioCtx.destination);
   src.start();
+}
+// === BRADLEY SESLERI (gercek dosyalar: 25mm + M240) ===
+let brad25Buf=null, bradMGBuf=null;
+async function _loadBradSounds(){
+  if(!audioCtx)return;
+  try{
+    if(!brad25Buf){
+      const r=await fetch("assets/sounds/brad_25mm.wav");const ab=await r.arrayBuffer();
+      brad25Buf=await audioCtx.decodeAudioData(ab);
+    }
+  }catch(e){}
+  try{
+    if(!bradMGBuf){
+      const r=await fetch("assets/sounds/brad_m240.ogg");const ab=await r.arrayBuffer();
+      bradMGBuf=await audioCtx.decodeAudioData(ab);
+    }
+  }catch(e){}
+}
+function playBrad25(vol){
+  if(paused||!audioCtx)return;
+  if(!brad25Buf){_loadBradSounds();return;}
+  const src=audioCtx.createBufferSource();src.buffer=brad25Buf;
+  const g=audioCtx.createGain();g.gain.value=Math.max(0,Math.min(1,vol*0.7));
+  src.connect(g);g.connect(audioCtx.destination);src.start();
+}
+function playBradMG(vol){
+  if(paused||!audioCtx)return;
+  if(!bradMGBuf){_loadBradSounds();return;}
+  const src=audioCtx.createBufferSource();src.buffer=bradMGBuf;
+  const g=audioCtx.createGain();g.gain.value=Math.max(0,Math.min(1,vol*0.5));
+  src.connect(g);g.connect(audioCtx.destination);src.start();
 }
 function playExplosion(){if(!audioCtx)return;const t=audioCtx.currentTime;const bufSize=audioCtx.sampleRate*0.4;const buf=audioCtx.createBuffer(1,bufSize,audioCtx.sampleRate);const d=buf.getChannelData(0);for(let i=0;i<bufSize;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/bufSize,2);const src=audioCtx.createBufferSource();src.buffer=buf;const g=audioCtx.createGain();g.gain.setValueAtTime(0.4,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.4);const f=audioCtx.createBiquadFilter();f.type='lowpass';f.frequency.value=600;src.connect(f);f.connect(g);g.connect(audioCtx.destination);src.start(t);}
 const SCALE=0.13;
@@ -803,8 +835,8 @@ function update(){
       const tt=Math.atan2(tg.y-t.y,tg.x-t.x);const tdiff=angleDiff(tt,t.turretAngle);
       t.turretAngle+=Math.sign(tdiff)*Math.min(Math.abs(tdiff),0.07);
       const aligned=Math.abs(tdiff)<0.12;
-      const bl=BRAD_CANNON?100*BRAD_TUR_SCALE/0.13*0.6:60; // namlu ucu (gorsel ile uyumlu)
-      const bx=t.x+Math.cos(t.turretAngle)*60, by=t.y+Math.sin(t.turretAngle)*60;
+      const bl=105*(BRAD_SCALE/0.82); // namlu ucu (dunya koordinati, demo ile uyumlu ~38px)
+      const bx=t.x+Math.cos(t.turretAngle)*bl, by=t.y+Math.sin(t.turretAngle)*bl;
       // 25mm TOP: orta menzil, alan hasari
       if(aligned&&td<=t.range&&t.fire25CD<=0&&t.spawning<=0){
         const t01=Math.min(1,td/t.range);const acc=0.92-0.4*t01;const willHit=Math.random()<acc;
@@ -813,7 +845,7 @@ function update(){
         t.fire25CD=t.fireRate;t.cannonRecoil=8;t.flash25=6;t.flash25Frame=0;
         const camCX=cam.x+VW/cam.zoom/2,camCY=cam.y+VH/cam.zoom/2;
         const sd=dist(t.x,t.y,camCX,camCY);const vol=Math.max(0,1-sd/800);
-        if(vol>0.05){if(t.team==='player')shake=Math.max(shake,2.5*vol);playShootAt(t.team==='player'?vol:vol*0.7);}
+        if(vol>0.05){if(t.team==='player')shake=Math.max(shake,2.5*vol);playBrad25(t.team==='player'?vol:vol*0.7);}
       }
       // M240 MAKINELI: yakin menzil, hizli, az hasar
       if(aligned&&td<=t.mgRange&&t.fireMGCD<=0&&t.spawning<=0){
@@ -822,7 +854,7 @@ function update(){
         const willHit=Math.random()<0.78;let aimAng=t.turretAngle;if(!willHit)aimAng+=(Math.random()-0.5)*0.2;
         bullets.push({x:mx,y:my,vx:Math.cos(aimAng)*20,vy:Math.sin(aimAng)*20,team:t.team,dmg:t.mgDmg,life:60,willHit,kind:'mg'});
         t.fireMGCD=t.mgFireRate;t.mgRecoil=3;t.flashMG=4;t.flashMGFrame=0;
-        if(t.team==='player')playShootAt(0.35);
+        if(t.team==='player')playBradMG(0.6);
       }
     } else if(tg && td<=STATS.range*1.15 && t.unitType==='tank'){
       // SADECE TANK: kule çevir ve ateş et (chinook, soldier, heli buraya girmesin)
@@ -1136,32 +1168,35 @@ function drawHeli(t){
 }
 function drawBradley(t){
   const [sx,sy]=w2s(t.x,t.y);const z=cam.zoom;
-  const hw=BRAD_HULL_W*BRAD_SCALE*z, hh=BRAD_HULL_H*BRAD_SCALE*z;
-  const tw=BRAD_TUR_W*BRAD_TUR_SCALE*z, th=BRAD_TUR_H*BRAD_TUR_SCALE*z;
+  // Demo orani: hull=0.82, turret=0.46, cannon=0.6, m240=0.55 (turret scale OLMADAN)
+  // Oyuna donusum: hepsi BRAD_FIT ile carpilir (demo 0.82 -> oyun 0.298)
+  const BRAD_FIT=BRAD_SCALE/0.82*z; // demo->oyun donusum * zoom
+  const hw=bradHullImg.width*0.82*BRAD_FIT, hh=bradHullImg.height*0.82*BRAD_FIT;
+  const tw=bradTurImg.width*0.46*BRAD_FIT, th=bradTurImg.height*0.46*BRAD_FIT;
   const idle=t.alive?Math.sin(t.idlePhase*4)*0.12*z:0;
   const alpha=t.spawning>0?(0.4+0.6*(1-t.spawning/30)):1;
-  // GOLGE (govde + kule silueti)
+  // GOLGE
   drawShadowSprite(bradHullImg,sx,sy,hw,hh,t.hullAngle+Math.PI/2);
   // GOVDE
   ctx.save();ctx.globalAlpha=alpha;ctx.translate(sx,sy);ctx.rotate(t.hullAngle+Math.PI/2);ctx.translate(0,idle);
   if(t.team==='enemy')ctx.filter='hue-rotate(300deg) saturate(1.3)';
   if(bradHullImg.complete)ctx.drawImage(bradHullImg,-hw/2,-hh/2,hw,hh);
   ctx.filter='none';ctx.restore();
-  // KULE + namlular (bagimsiz doner)
+  // KULE + namlular (bagimsiz doner) - demo ile birebir
   ctx.save();ctx.globalAlpha=alpha;ctx.translate(sx,sy);ctx.rotate(t.turretAngle+Math.PI/2);
   if(t.team==='enemy')ctx.filter='hue-rotate(300deg) saturate(1.3)';
-  // 25mm namlu (geri tepme)
-  if(bradCannonImg.complete){const cw=bradCannonImg.width*BRAD_TUR_SCALE*0.6*z,ch=bradCannonImg.height*BRAD_TUR_SCALE*0.6*z;
-    ctx.drawImage(bradCannonImg,-cw/2+1*z,-ch-8*z+(t.cannonRecoil||0)*z,cw,ch);}
-  // M240 namlu (yan ofset)
-  if(bradM240Img.complete){const mw=bradM240Img.width*BRAD_TUR_SCALE*0.55*z,mh=bradM240Img.height*BRAD_TUR_SCALE*0.55*z;
-    ctx.drawImage(bradM240Img,-mw/2+11*z,-mh-4*z+(t.mgRecoil||0)*z,mw,mh);}
+  // 25mm namlu (uzun, geri tepme) - demo: width*0.6, -ch-8
+  if(bradCannonImg.complete){const cw=bradCannonImg.width*0.6*BRAD_FIT,ch=bradCannonImg.height*0.6*BRAD_FIT;
+    ctx.drawImage(bradCannonImg,-cw/2+1*BRAD_FIT,-ch-8*BRAD_FIT+(t.cannonRecoil||0)*BRAD_FIT,cw,ch);}
+  // M240 namlu (yan ofset) - demo: width*0.55, +11, -mh-4
+  if(bradM240Img.complete){const mw=bradM240Img.width*0.55*BRAD_FIT,mh=bradM240Img.height*0.55*BRAD_FIT;
+    ctx.drawImage(bradM240Img,-mw/2+11*BRAD_FIT,-mh-4*BRAD_FIT+(t.mgRecoil||0)*BRAD_FIT,mw,mh);}
   // kule govdesi
   if(bradTurImg.complete)ctx.drawImage(bradTurImg,-tw/2,-th/2,tw,th);
   ctx.filter='none';ctx.restore();
-  // NAMLU ATESI (cikartilan 6 kareli animasyon)
-  drawBradFlash(t.flash25,t.flash25Frame,t.turretAngle,sx,sy,60*z+8*z,0.85*z,0);
-  drawBradFlash(t.flashMG,t.flashMGFrame,t.turretAngle,sx,sy,55*z,0.5*z,7*z);
+  // NAMLU ATESI - demo: dist 105/95, scale 0.85/0.5, sideOff 11
+  drawBradFlash(t.flash25,t.flash25Frame,t.turretAngle,sx,sy,105*BRAD_FIT,0.85*BRAD_FIT,0);
+  drawBradFlash(t.flashMG,t.flashMGFrame,t.turretAngle,sx,sy,95*BRAD_FIT,0.5*BRAD_FIT,11*BRAD_FIT);
   // secim + can cubugu
   if(t.selected){drawSelectBrackets(sx,sy,hw*0.55,hh*0.5);}
   ctx.fillStyle=t.team==='player'?'#5cff7a':'#ff5c5c';ctx.beginPath();ctx.arc(sx,sy-hh*0.46,3*z,0,Math.PI*2);ctx.fill();
