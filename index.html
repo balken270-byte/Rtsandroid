@@ -359,14 +359,13 @@ const enemyFactory={x:MAP_W-700,y:MAP_H-900,w:FAC_W*FAC_SCALE,h:FAC_H*FAC_SCALE,
 // Ussun yaninda, tam askeri havalimani (pist + hangar + helipad)
 const AIRPORT_IMG="assets/images/building/airport.png";
 const airportImg=new Image();airportImg.src=AIRPORT_IMG;
-const AIRPORT_W=1600, AIRPORT_H=763; // dunya px (gorsel orani 2.096:1) - buyuk
-const airport={x:1700, y:2300, w:AIRPORT_W, h:AIRPORT_H, buildQueue:[], buildTimer:0, selected:false, pads:[]};
-// Ped konumlari gorseldeki "H" isaretlerine gore (rel: x=0.600/0.675/0.752, y=0.42)
+const AIRPORT_W=620, AIRPORT_H=296; // dunya px (gorsel orani 2.096:1) - kompakt (Generals tarzi)
+const airport={x:1150, y:1700, w:AIRPORT_W, h:AIRPORT_H, buildQueue:[], buildTimer:0, selected:false, pads:[]};
+// Park yerleri: kompakt havaalaninda 2 CH-47 (genis aralik, ust apron bolgesi)
 function _initAirportPads(){
   airport.pads=[
-    {x:airport.x+(0.600-0.5)*airport.w, y:airport.y+(0.42-0.5)*airport.h, occupied:false},
-    {x:airport.x+(0.675-0.5)*airport.w, y:airport.y+(0.42-0.5)*airport.h, occupied:false},
-    {x:airport.x+(0.752-0.5)*airport.w, y:airport.y+(0.42-0.5)*airport.h, occupied:false},
+    {x:airport.x-airport.w*0.18, y:airport.y-airport.h*0.05, occupied:false},
+    {x:airport.x+airport.w*0.18, y:airport.y-airport.h*0.05, occupied:false},
   ];
 }
 _initAirportPads();
@@ -434,7 +433,7 @@ function setup(){
   _initAirportPads();
   for(let i=0;i<3;i++)tanks.push(makeTank(800+(i%2)*80,1100+Math.floor(i/2)*100,'player'));
   spawnEnemyWave(2);
-  cam.x=400;cam.y=900;clampCam();
+  cam.x=350;cam.y=800;clampCam();
 }
 function spawnEnemyWave(n){waveNum++;for(let i=0;i<n;i++){const ex=MAP_W-600-Math.random()*300,ey=MAP_H-1200-Math.random()*600;tanks.push(makeTank(ex,ey,'enemy'));}flashStatus(`⚔️ Düşman dalgası ${waveNum}! (${n} tank)`);}
 
@@ -588,18 +587,27 @@ canvas.addEventListener('pointerup',e=>{
         else flashStatus(`Yetersiz kaynak! (${cost} gerek)`);
         burst(factory.x,factory.y,'#cfffaf',12);
       } else {
-        let tap=null, tapEnemy=null;
-        for(const t of tanks){if(t.alive&&hit(wx,wy,t)){if(t.team==='player')tap=t;else tapEnemy=t;}}
-        if(tap){
-          // Eger dokunulan bir CH-47 ise VE secili kara birimleri varsa: onlari bindir
-          const sel=tanks.filter(t=>t.selected&&t.alive&&t!==tap);
-          const groundSel=sel.filter(t=>t.unitType==='tank'||t.unitType==='soldier'||t.unitType==='bradley');
-          if(tap.unitType==='chinook' && groundSel.length>0){
-            groundSel.forEach(t=>{t.tx=tap.x+(Math.random()-0.5)*60;t.ty=tap.y+(Math.random()-0.5)*60;t.hasOrder=true;t.focusTarget=null;t.homeX=t.tx;t.homeY=t.ty;});
-            flashStatus('🚶 Birlikler CH-47\'ye biniyor...');burst(tap.x,tap.y,'#9fcfff',10);
-          } else {
-            tanks.forEach(t=>t.selected=false);factory.selected=false;airport.selected=false;tap.selected=true;burst(tap.x,tap.y,'#7fff9f',10);
-          }
+        let tap=null, tapEnemy=null, tapChinook=null;
+        for(const t of tanks){
+          if(!t.alive)continue;
+          // CH-47 icin genis dokunma alani (buyuk arac)
+          if(t.unitType==='chinook'&&t.team==='player'&&dist(wx,wy,t.x,t.y)<70){tapChinook=t;}
+          if(hit(wx,wy,t)){if(t.team==='player')tap=t;else tapEnemy=t;}
+        }
+        // CH-47'ye dokunuldu + secili kara birimleri var -> BINDIR
+        const selUnits=tanks.filter(t=>t.selected&&t.alive);
+        const groundSel=selUnits.filter(t=>t.unitType==='tank'||t.unitType==='soldier'||t.unitType==='bradley');
+        if(tapChinook && groundSel.length>0){
+          // birimleri CH-47'ye bindirme emri ver (boardTarget)
+          groundSel.forEach(t=>{t.boardTarget=tapChinook;t.tx=tapChinook.x;t.ty=tapChinook.y;t.hasOrder=true;t.focusTarget=null;});
+          flashStatus('🚶 Birlikler CH-47\'ye biniyor...');burst(tapChinook.x,tapChinook.y,'#9fcfff',10);
+        }
+        else if(tapChinook){
+          // sadece CH-47 sec
+          tanks.forEach(t=>t.selected=false);factory.selected=false;airport.selected=false;tapChinook.selected=true;burst(tapChinook.x,tapChinook.y,'#7fff9f',10);
+        }
+        else if(tap){
+          tanks.forEach(t=>t.selected=false);factory.selected=false;airport.selected=false;tap.selected=true;burst(tap.x,tap.y,'#7fff9f',10);
         }
         else if(tapEnemy){
           // DÜŞMANA DOKUNULDU: seçili birimleri ona KİLİTLE (saldırı emri)
@@ -1099,24 +1107,22 @@ function update(){
   // boylece O(n^2) donguler (collision, nearestEnemy, bullet) sismez
   for(let i=tanks.length-1;i>=0;i--){if(!tanks[i].alive&&tanks[i].deadTimer>130)tanks.splice(i,1);}
   if(shake>0)shake*=0.85;
-  // NAKLİYE: CH-47 PİSTTE (idle) beklerken yakındaki birimler biner
-  for(const ch of tanks){
-    if(!ch.alive||ch.unitType!=='chinook'||ch.team!=='player')continue;
-    // YALNIZCA pistte bekliyorken (idle) ve yere inmisken alir
-    if(ch.chMode!=='idle')continue;
-    if(!(ch.altitude!==undefined&&ch.altitude<5))continue;
-    if(ch.cargo.length>=ch.maxCargo)continue;
-    // 110 piksel içindeki yer birimleri otomatik biner
-    for(let i=tanks.length-1;i>=0;i--){
-      const u=tanks[i];
-      if(!u.alive||u.team!=='player'||u===ch)continue;
-      if(u.unitType==='chinook'||u.unitType==='heli')continue; // hava birimleri binmez
-      const d=Math.hypot(u.x-ch.x,u.y-ch.y);
-      if(d<130 && ch.cargo.length<ch.maxCargo){
-        ch.cargo.push({type:u.unitType,hp:u.hp,maxHp:u.maxHp});
-        u.alive=false; u.deadTimer=999;
-        if(typeof flashStatus==='function')flashStatus('🚁 Yolcu alındı ('+ch.cargo.length+'/'+ch.maxCargo+')');
-      }
+  // NAKLİYE: boardTarget'i olan birimler CH-47'ye yaklasinca biner
+  for(let i=tanks.length-1;i>=0;i--){
+    const u=tanks[i];
+    if(!u.alive||u.team!=='player'||!u.boardTarget)continue;
+    const ch=u.boardTarget;
+    // hedef CH-47 gecersizse iptal
+    if(!ch.alive||ch.unitType!=='chinook'||ch.cargo.length>=ch.maxCargo){u.boardTarget=null;u.hasOrder=false;continue;}
+    // CH-47'ye yakinsa BIN
+    const d=Math.hypot(u.x-ch.x,u.y-ch.y);
+    if(d<80){
+      ch.cargo.push({type:u.unitType,hp:u.hp,maxHp:u.maxHp});
+      u.alive=false;u.deadTimer=999;
+      flashStatus('🚁 Yolcu alındı ('+ch.cargo.length+'/'+ch.maxCargo+')');
+    } else {
+      // CH-47'ye dogru yurumeye devam (CH-47 hareket etmis olabilir)
+      u.tx=ch.x;u.ty=ch.y;u.hasOrder=true;
     }
   }
   const pa=tanks.filter(t=>t.alive&&t.team==='player').length;
@@ -1406,17 +1412,19 @@ function drawAirport(){
   const z=cam.zoom;
   const [sx,sy]=w2s(airport.x,airport.y);
   const aw=airport.w*z, ah=airport.h*z;
-  // GÖLGE (hafif, zemine otursun)
+  // YUMUSAK GÖLGE (zemine otursun, sirtmasin)
   if(airportImg.complete){
-    ctx.save();ctx.globalAlpha=0.3;ctx.filter='brightness(0)';
-    ctx.drawImage(airportImg,sx-aw/2+5*z,sy-ah/2+5*z,aw,ah);
+    ctx.save();ctx.globalAlpha=0.35;ctx.filter='blur('+(3*z)+'px) brightness(0)';
+    ctx.drawImage(airportImg,sx-aw/2+4*z,sy-ah/2+6*z,aw,ah);
     ctx.filter='none';ctx.restore();
   }
   // HAVALİMANI görseli
   if(airportImg.complete){
     ctx.drawImage(airportImg,sx-aw/2,sy-ah/2,aw,ah);
+    // hafif toprak tonu overlay (oyunun kahverengi zeminine uyum, sirtmayi azalt)
+    ctx.save();ctx.globalAlpha=0.10;ctx.globalCompositeOperation='overlay';
+    ctx.fillStyle='#6b4a32';ctx.fillRect(sx-aw/2,sy-ah/2,aw,ah);ctx.restore();
   } else {
-    // gorsel yuklenene kadar gri kutu
     ctx.fillStyle='#2b2e33';ctx.fillRect(sx-aw/2,sy-ah/2,aw,ah);
   }
   // SEÇİM çerçevesi
