@@ -24,6 +24,7 @@
   <button id="bTank" class="active">🔧 Tank (100)</button>
   <button id="bHeli">🚁 Heli (150)</button>
   <button id="bSold">🪖 Asker (50)</button>
+  <button id="bBrad">🚛 Bradley (130)</button>
   <button id="bCh47">🚁 CH-47 (300)</button>
   <button id="bDeploy">📦 İndir</button>
 </div>
@@ -50,6 +51,18 @@ const CH47="assets/images/aircraft/ch47.png";
 const CH47_ROTOR="assets/images/aircraft/ch47_rotor.png";
 const ROTOR="assets/images/aircraft/rotor.png";
 const HELI_W=487;const HELI_H=1267;const ROTOR_W=576;const ROTOR_H=580;const HUB_X=0.495;const HUB_Y=0.34;
+
+// === M2A3 BRADLEY ASSETS ===
+const BRAD_HULL="assets/images/bradley/bradley_hull.png";
+const BRAD_TURRET="assets/images/bradley/bradley_turret.png";
+const BRAD_CANNON="assets/images/bradley/bradley_cannon.png";
+const BRAD_M240="assets/images/bradley/bradley_m240.png";
+const BRAD_FIRE=["assets/images/bradley/fire_01.png","assets/images/bradley/fire_02.png","assets/images/bradley/fire_03.png","assets/images/bradley/fire_04.png","assets/images/bradley/fire_05.png","assets/images/bradley/fire_06.png"];
+// Bradley boyutlari (gercek olculere gore: tankin ~%85'i)
+const BRAD_HULL_W=127, BRAD_HULL_H=239, BRAD_TUR_W=179, BRAD_TUR_H=180;
+const BRAD_SCALE=0.298;       // govde olcegi (tank SCALE=0.13 ile uyumlu, asset buyuk oldugu icin farkli)
+const BRAD_TUR_SCALE=0.13;    // kule olcegi (gercek orana gore kucuk)
+const BRAD_COST=130;
 
 
 
@@ -114,6 +127,12 @@ const heliImg=new Image();heliImg.src=HELI;
 const rotorImg=new Image();rotorImg.src=ROTOR;
 const ch47Img=new Image();ch47Img.src=CH47;
 const ch47RotorImg=new Image();ch47RotorImg.src=CH47_ROTOR;
+// === BRADLEY gorselleri ===
+const bradHullImg=new Image();bradHullImg.src=BRAD_HULL;
+const bradTurImg=new Image();bradTurImg.src=BRAD_TURRET;
+const bradCannonImg=new Image();bradCannonImg.src=BRAD_CANNON;
+const bradM240Img=new Image();bradM240Img.src=BRAD_M240;
+const bradFireImgs=BRAD_FIRE.map(src=>{const im=new Image();im.src=src;return im;});
 // (M1A2 görselleri kaldırıldı - eski tank kullanılıyor)
 // ASKER animasyon görselleri (her grup için Image dizisi)
 const sldImgs={};
@@ -253,6 +272,11 @@ window.addEventListener('load',()=>{
       if(resources>=300){resources-=300;factory.buildQueue.push('chinook');flashStatus('🚁 CH-47 sıraya eklendi ('+factory.buildQueue.length+')');}
       else flashStatus('Yetersiz kaynak! (300 gerek)');
     };
+    const bBr=document.getElementById('bBrad');
+    if(bBr)bBr.onclick=()=>{
+      if(resources>=BRAD_COST){resources-=BRAD_COST;factory.buildQueue.push('bradley');flashStatus('🚛 Bradley sıraya eklendi ('+factory.buildQueue.length+')');}
+      else flashStatus('Yetersiz kaynak! ('+BRAD_COST+' gerek)');
+    };
     const bD=document.getElementById('bDeploy');
     if(bD)bD.onclick=()=>{
       let total=0;
@@ -348,6 +372,18 @@ function makeSoldier(x,y,team){
     selected:false,alive:true,deadTimer:0,smokeTimer:0,hasOrder:false,spawning:0,incomingDmg:0,
     focusTarget:null,homeX:x,homeY:y,faceDir:undefined,
     speed:1.0,range:360,dmg:8,fireRate:28};
+}
+// M2A3 BRADLEY (piyade savas araci) - cift silah: 25mm top + M240 makineli
+function makeBradley(x,y,team){
+  return {x,y,tx:x,ty:y,team,unitType:'bradley',hp:150,maxHp:150,
+    hullAngle:team==='player'?Math.PI/2:-Math.PI/2,turretAngle:team==='player'?Math.PI/2:-Math.PI/2,
+    hullTurnVel:0,fireCooldown:Math.random()*60,trackPhase:0,cannonRecoil:0,mgRecoil:0,muzzle:0,idlePhase:Math.random()*6,
+    fire25CD:Math.random()*40,fireMGCD:0,flash25:0,flash25Frame:0,flashMG:0,flashMGFrame:0,
+    selected:false,alive:true,deadTimer:0,smokeTimer:0,hasOrder:false,spawning:0,incomingDmg:0,
+    focusTarget:null,homeX:x,homeY:y,faceDir:undefined,
+    // Bradley istatistikleri (tank-asker arasi, hizli destek araci)
+    speed:1.3,range:440,dmg:12,fireRate:40,
+    mgRange:300,mgDmg:5,mgFireRate:8};
 }
 let tanks=[];const wrecks=[];let waveNum=0,waveTimer=400;
 function setup(){
@@ -535,10 +571,10 @@ function update(){
   if(factory.buildQueue.length>0){
     factory.buildTimer++;
     const curType=factory.buildQueue[0];
-    const buildTime=curType==='chinook'?360:curType==='heli'?240:curType==='soldier'?90:180;
+    const buildTime=curType==='chinook'?360:curType==='heli'?240:curType==='soldier'?90:curType==='bradley'?200:180;
     if(factory.buildTimer>=buildTime){
       factory.buildTimer=0;factory.buildQueue.shift();
-      const nt=curType==='chinook'?makeChinook(factory.x,factory.y+factory.h/2+50,'player'):curType==='heli'?makeHeli(factory.x,factory.y+factory.h/2+40,'player'):curType==='soldier'?makeSoldier(factory.x,factory.y+factory.h/2+25,'player'):makeTank(factory.x,factory.y+factory.h/2+30,'player');
+      const nt=curType==='chinook'?makeChinook(factory.x,factory.y+factory.h/2+50,'player'):curType==='heli'?makeHeli(factory.x,factory.y+factory.h/2+40,'player'):curType==='soldier'?makeSoldier(factory.x,factory.y+factory.h/2+25,'player'):curType==='bradley'?makeBradley(factory.x,factory.y+factory.h/2+35,'player'):makeTank(factory.x,factory.y+factory.h/2+30,'player');
       nt.spawning=30;nt.tx=factory.rallyX;nt.ty=factory.rallyY;nt.hasOrder=true;
       tanks.push(nt);burst(nt.x,nt.y,'#7fff9f',16,4);
     }
@@ -562,10 +598,11 @@ function update(){
   enemyFactory.resources+=0.15; // düşman da kaynak kazanır
   enemyFactory.spawnTimer++;
   if(enemyFactory.spawnTimer>=180 && enemyFactory.resources>=50){
-    // RASTGELE birim seç: %50 tank, %25 heli, %25 asker (combined arms)
+    // RASTGELE birim seç: %40 tank, %20 bradley, %20 heli, %20 asker (combined arms)
     const roll=Math.random();let cost,maker;
-    if(roll<0.5 && enemyFactory.resources>=100){cost=100;maker=makeTank;}
-    else if(roll<0.75 && enemyFactory.resources>=150){cost=150;maker=makeHeli;}
+    if(roll<0.4 && enemyFactory.resources>=100){cost=100;maker=makeTank;}
+    else if(roll<0.6 && enemyFactory.resources>=BRAD_COST){cost=BRAD_COST;maker=makeBradley;}
+    else if(roll<0.8 && enemyFactory.resources>=150){cost=150;maker=makeHeli;}
     else {cost=50;maker=makeSoldier;}
     if(enemyFactory.resources>=cost){
       enemyFactory.spawnTimer=0; enemyFactory.resources-=cost;
@@ -691,6 +728,19 @@ function update(){
         t.hullAngle+=Math.sign(diff)*Math.min(Math.abs(diff),0.06);
       }
       if(false){t.hasOrder=false;}
+    } else if(t.unitType==='bradley'){
+      // BRADLEY: tank gibi hareket eder ama daha hizli ve cevik
+      const moving=dd>t.speed+2;
+      if(moving){
+        const targetH=Math.atan2(dy,dx);const diff=angleDiff(targetH,t.hullAngle);
+        const maxV=Math.min(0.06,Math.abs(diff)*0.5+0.008);const desired=Math.sign(diff)*maxV;
+        t.hullTurnVel+=(desired-t.hullTurnVel)*0.25;
+        if(Math.abs(diff)<0.03){t.hullAngle=targetH;t.hullTurnVel=0;}else t.hullAngle+=t.hullTurnVel;
+        if(Math.abs(diff)<0.22){t.x+=Math.cos(t.hullAngle)*t.speed;t.y+=Math.sin(t.hullAngle)*t.speed;t.trackPhase+=0.25;if(time%5===0)tracks.push({x:t.x,y:t.y,a:t.hullAngle,life:1});}
+      }else{
+        t.hullTurnVel*=0.7;t.hasOrder=false;
+        if(t.faceDir!==undefined&&(!tg||td>t.range)){const fd=angleDiff(t.faceDir,t.hullAngle);if(Math.abs(fd)>0.02)t.hullAngle+=Math.sign(fd)*Math.min(Math.abs(fd),0.06);}
+      }
     } else {
       const moving=dd>STATS.moveSpeed+2;
       if(moving){
@@ -748,6 +798,32 @@ function update(){
           if(t.team==='player'){shake=Math.max(shake,5);playExplosion();}
         }
       }
+    } else if(tg && t.unitType==='bradley'){
+      // BRADLEY: kule cevir, 25mm top (ana) + M240 makineli (ikincil)
+      const tt=Math.atan2(tg.y-t.y,tg.x-t.x);const tdiff=angleDiff(tt,t.turretAngle);
+      t.turretAngle+=Math.sign(tdiff)*Math.min(Math.abs(tdiff),0.07);
+      const aligned=Math.abs(tdiff)<0.12;
+      const bl=BRAD_CANNON?100*BRAD_TUR_SCALE/0.13*0.6:60; // namlu ucu (gorsel ile uyumlu)
+      const bx=t.x+Math.cos(t.turretAngle)*60, by=t.y+Math.sin(t.turretAngle)*60;
+      // 25mm TOP: orta menzil, alan hasari
+      if(aligned&&td<=t.range&&t.fire25CD<=0&&t.spawning<=0){
+        const t01=Math.min(1,td/t.range);const acc=0.92-0.4*t01;const willHit=Math.random()<acc;
+        let aimAng=t.turretAngle;if(!willHit)aimAng+=(Math.random()-0.5)*0.18;
+        bullets.push({x:bx,y:by,vx:Math.cos(aimAng)*12,vy:Math.sin(aimAng)*12,team:t.team,dmg:t.dmg,life:120,willHit,kind:'25mm'});
+        t.fire25CD=t.fireRate;t.cannonRecoil=8;t.flash25=6;t.flash25Frame=0;
+        const camCX=cam.x+VW/cam.zoom/2,camCY=cam.y+VH/cam.zoom/2;
+        const sd=dist(t.x,t.y,camCX,camCY);const vol=Math.max(0,1-sd/800);
+        if(vol>0.05){if(t.team==='player')shake=Math.max(shake,2.5*vol);playShootAt(t.team==='player'?vol:vol*0.7);}
+      }
+      // M240 MAKINELI: yakin menzil, hizli, az hasar
+      if(aligned&&td<=t.mgRange&&t.fireMGCD<=0&&t.spawning<=0){
+        const ox=Math.cos(t.turretAngle+Math.PI/2)*7,oy=Math.sin(t.turretAngle+Math.PI/2)*7;
+        const mx=bx+ox,my=by+oy;
+        const willHit=Math.random()<0.78;let aimAng=t.turretAngle;if(!willHit)aimAng+=(Math.random()-0.5)*0.2;
+        bullets.push({x:mx,y:my,vx:Math.cos(aimAng)*20,vy:Math.sin(aimAng)*20,team:t.team,dmg:t.mgDmg,life:60,willHit,kind:'mg'});
+        t.fireMGCD=t.mgFireRate;t.mgRecoil=3;t.flashMG=4;t.flashMGFrame=0;
+        if(t.team==='player')playShootAt(0.35);
+      }
     } else if(tg && td<=STATS.range*1.15 && t.unitType==='tank'){
       // SADECE TANK: kule çevir ve ateş et (chinook, soldier, heli buraya girmesin)
       const tt=Math.atan2(tg.y-t.y,tg.x-t.x);const tdiff=angleDiff(tt,t.turretAngle);
@@ -764,6 +840,13 @@ function update(){
       }
     }else {t.turretAngle+=angleDiff(t.hullAngle,t.turretAngle)*0.06;} // düşman yoksa/uzaksa gövdeyle hizala
     if(t.fireCooldown>0)t.fireCooldown--;if(t.recoil>0)t.recoil*=0.78;if(t.muzzle>0)t.muzzle--;
+    // BRADLEY sayaclari
+    if(t.unitType==='bradley'){
+      if(t.fire25CD>0)t.fire25CD--;if(t.fireMGCD>0)t.fireMGCD--;
+      if(t.cannonRecoil>0)t.cannonRecoil*=0.8;if(t.mgRecoil>0)t.mgRecoil*=0.8;
+      if(t.flash25>0){t.flash25--;t.flash25Frame=Math.min(5,Math.floor((6-t.flash25)*0.9));}
+      if(t.flashMG>0){t.flashMG--;t.flashMGFrame=Math.min(5,Math.floor((6-t.flashMG)*0.9));}
+    }
   }
   for(let i=0;i<tanks.length;i++){const a=tanks[i];if(!a.alive)continue;for(let j=i+1;j<tanks.length;j++){const b=tanks[j];if(!b.alive)continue;
       const bothHeli=a.unitType==='heli'&&b.unitType==='heli';
@@ -805,6 +888,11 @@ function update(){
           if(t.unitType==='soldier')dmgMul=1.4;
           else if(t.unitType==='tank')dmgMul=0.5; // tank zırhı
           else if(t.unitType==='heli')dmgMul=1.2;
+        } else if(b.kind==='25mm'){ // 25mm Bushmaster: askere/heliye guclu, tanka orta
+          if(t.unitType==='soldier')dmgMul=1.5;
+          else if(t.unitType==='heli')dmgMul=1.1;
+          else if(t.unitType==='tank')dmgMul=0.7; // agir tank zirhi
+          else if(t.unitType==='bradley')dmgMul=1.0;
         } else { // normal tank topu: tanka normal, askere fazla, heliye orta
           if(t.unitType==='soldier')dmgMul=1.3;
           else if(t.unitType==='heli')dmgMul=0.9;
@@ -1046,10 +1134,53 @@ function drawHeli(t){
   const bw=40*z,bh=4*z,by=sy-fly-hh*0.46-8*z;ctx.fillStyle='rgba(0,0,0,0.5)';ctx.fillRect(sx-bw/2,by,bw,bh);
   const r=Math.max(0,t.hp/t.maxHp);ctx.fillStyle=r>0.5?'#5cff7a':r>0.25?'#ffd27f':'#ff5c3a';ctx.fillRect(sx-bw/2,by,bw*r,bh);
 }
+function drawBradley(t){
+  const [sx,sy]=w2s(t.x,t.y);const z=cam.zoom;
+  const hw=BRAD_HULL_W*BRAD_SCALE*z, hh=BRAD_HULL_H*BRAD_SCALE*z;
+  const tw=BRAD_TUR_W*BRAD_TUR_SCALE*z, th=BRAD_TUR_H*BRAD_TUR_SCALE*z;
+  const idle=t.alive?Math.sin(t.idlePhase*4)*0.12*z:0;
+  const alpha=t.spawning>0?(0.4+0.6*(1-t.spawning/30)):1;
+  // GOLGE (govde + kule silueti)
+  drawShadowSprite(bradHullImg,sx,sy,hw,hh,t.hullAngle+Math.PI/2);
+  // GOVDE
+  ctx.save();ctx.globalAlpha=alpha;ctx.translate(sx,sy);ctx.rotate(t.hullAngle+Math.PI/2);ctx.translate(0,idle);
+  if(t.team==='enemy')ctx.filter='hue-rotate(300deg) saturate(1.3)';
+  if(bradHullImg.complete)ctx.drawImage(bradHullImg,-hw/2,-hh/2,hw,hh);
+  ctx.filter='none';ctx.restore();
+  // KULE + namlular (bagimsiz doner)
+  ctx.save();ctx.globalAlpha=alpha;ctx.translate(sx,sy);ctx.rotate(t.turretAngle+Math.PI/2);
+  if(t.team==='enemy')ctx.filter='hue-rotate(300deg) saturate(1.3)';
+  // 25mm namlu (geri tepme)
+  if(bradCannonImg.complete){const cw=bradCannonImg.width*BRAD_TUR_SCALE*0.6*z,ch=bradCannonImg.height*BRAD_TUR_SCALE*0.6*z;
+    ctx.drawImage(bradCannonImg,-cw/2+1*z,-ch-8*z+(t.cannonRecoil||0)*z,cw,ch);}
+  // M240 namlu (yan ofset)
+  if(bradM240Img.complete){const mw=bradM240Img.width*BRAD_TUR_SCALE*0.55*z,mh=bradM240Img.height*BRAD_TUR_SCALE*0.55*z;
+    ctx.drawImage(bradM240Img,-mw/2+11*z,-mh-4*z+(t.mgRecoil||0)*z,mw,mh);}
+  // kule govdesi
+  if(bradTurImg.complete)ctx.drawImage(bradTurImg,-tw/2,-th/2,tw,th);
+  ctx.filter='none';ctx.restore();
+  // NAMLU ATESI (cikartilan 6 kareli animasyon)
+  drawBradFlash(t.flash25,t.flash25Frame,t.turretAngle,sx,sy,60*z+8*z,0.85*z,0);
+  drawBradFlash(t.flashMG,t.flashMGFrame,t.turretAngle,sx,sy,55*z,0.5*z,7*z);
+  // secim + can cubugu
+  if(t.selected){drawSelectBrackets(sx,sy,hw*0.55,hh*0.5);}
+  ctx.fillStyle=t.team==='player'?'#5cff7a':'#ff5c5c';ctx.beginPath();ctx.arc(sx,sy-hh*0.46,3*z,0,Math.PI*2);ctx.fill();
+  const bw=40*z,bh=4*z,by=sy-hh*0.42-8*z;ctx.fillStyle='rgba(0,0,0,0.5)';ctx.fillRect(sx-bw/2,by,bw,bh);
+  const r=Math.max(0,t.hp/t.maxHp);ctx.fillStyle=r>0.5?'#5cff7a':r>0.25?'#ffd27f':'#ff5c3a';ctx.fillRect(sx-bw/2,by,bw*r,bh);
+}
+function drawBradFlash(flashT,frame,ang,sx,sy,dist,scale,sideOff){
+  if(flashT<=0)return;const fr=bradFireImgs[Math.min(5,frame)];if(!fr||!fr.complete)return;
+  const ox=Math.cos(ang+Math.PI/2)*sideOff, oy=Math.sin(ang+Math.PI/2)*sideOff;
+  const fx=sx+Math.cos(ang)*dist+ox, fy=sy+Math.sin(ang)*dist+oy;
+  ctx.save();ctx.globalCompositeOperation='lighter';ctx.translate(fx,fy);ctx.rotate(ang+Math.PI/2);
+  const w=fr.width*0.6*scale,h=fr.height*0.6*scale;
+  ctx.drawImage(fr,-w/2,-h*0.85,w,h);ctx.restore();
+}
 function drawTankWorld(t){
   if(t.unitType==='chinook'){drawChinook(t);return;}
   if(t.unitType==='heli'){drawHeli(t);return;}
   if(t.unitType==='soldier'){drawSoldier(t);return;}
+  if(t.unitType==='bradley'){drawBradley(t);return;}
   const [sx,sy]=w2s(t.x,t.y);const z=cam.zoom;
   const isEnemy=t.team==='enemy';
   const HW=isEnemy?EHULL_W:HULL_W, HH=isEnemy?EHULL_H:HULL_H;
