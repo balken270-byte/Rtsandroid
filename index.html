@@ -359,13 +359,14 @@ const enemyFactory={x:MAP_W-700,y:MAP_H-900,w:FAC_W*FAC_SCALE,h:FAC_H*FAC_SCALE,
 // Ussun yaninda, tam askeri havalimani (pist + hangar + helipad)
 const AIRPORT_IMG="assets/images/building/airport.png";
 const airportImg=new Image();airportImg.src=AIRPORT_IMG;
-const AIRPORT_W=620, AIRPORT_H=296; // dunya px (gorsel orani 2.096:1) - kompakt (Generals tarzi)
-const airport={x:1150, y:1700, w:AIRPORT_W, h:AIRPORT_H, buildQueue:[], buildTimer:0, selected:false, pads:[]};
-// Park yerleri: kompakt havaalaninda 2 CH-47 (genis aralik, ust apron bolgesi)
+const AIRPORT_W=900, AIRPORT_H=689; // dunya px (gorsel orani 1.307:1) - neredeyse kare
+const airport={x:1250, y:1850, w:AIRPORT_W, h:AIRPORT_H, buildQueue:[], buildTimer:0, selected:false, pads:[]};
+// Park yerleri gorseldeki 3 "H" pad'e gore (rel: x=0.245/0.49/0.74, y=0.56)
 function _initAirportPads(){
   airport.pads=[
-    {x:airport.x-airport.w*0.18, y:airport.y-airport.h*0.05, occupied:false},
-    {x:airport.x+airport.w*0.18, y:airport.y-airport.h*0.05, occupied:false},
+    {x:airport.x+(0.245-0.5)*airport.w, y:airport.y+(0.56-0.5)*airport.h, occupied:false},
+    {x:airport.x+(0.490-0.5)*airport.w, y:airport.y+(0.56-0.5)*airport.h, occupied:false},
+    {x:airport.x+(0.740-0.5)*airport.w, y:airport.y+(0.56-0.5)*airport.h, occupied:false},
   ];
 }
 _initAirportPads();
@@ -1421,9 +1422,6 @@ function drawAirport(){
   // HAVALİMANI görseli
   if(airportImg.complete){
     ctx.drawImage(airportImg,sx-aw/2,sy-ah/2,aw,ah);
-    // hafif toprak tonu overlay (oyunun kahverengi zeminine uyum, sirtmayi azalt)
-    ctx.save();ctx.globalAlpha=0.10;ctx.globalCompositeOperation='overlay';
-    ctx.fillStyle='#6b4a32';ctx.fillRect(sx-aw/2,sy-ah/2,aw,ah);ctx.restore();
   } else {
     ctx.fillStyle='#2b2e33';ctx.fillRect(sx-aw/2,sy-ah/2,aw,ah);
   }
