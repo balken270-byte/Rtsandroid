@@ -204,11 +204,9 @@ function startEngine(){
   engineNode.disconnect();engineNode.connect(filter);filter.connect(engineGain);
 }
 function updateEngine(movingCount){
-  if(!audioCtx)return;
-  if(!engineNode)startEngine();
-  if(!engineGain)return;
-  const targetVol=movingCount>0?0.12*Math.min(movingCount,4)/4:0;
-  engineGain.gain.linearRampToValueAtTime(targetVol,audioCtx.currentTime+0.3);
+  // Motor sesi tamamen kapali (bug: cift tanim + surekli aktif sizinti)
+  if(engineGain){try{engineGain.gain.value=0;}catch(e){}}
+  return;
 }
 const _SHOT_DATA="assets/sounds/_shot_data.mp3";
 let shotBuf=null;
@@ -254,21 +252,21 @@ function playBrad25(vol){
   if(paused||!audioCtx)return;
   if(!brad25Buf){_loadBradSounds();return;}
   const src=audioCtx.createBufferSource();src.buffer=brad25Buf;
-  const g=audioCtx.createGain();g.gain.value=Math.max(0,Math.min(1,vol*0.7));
+  const g=audioCtx.createGain();g.gain.value=Math.max(0,Math.min(1,vol*0.4));
   src.connect(g);g.connect(audioCtx.destination);src.start();
 }
 function playBradMG(vol){
   if(paused||!audioCtx)return;
   if(!bradMGBuf){_loadBradSounds();return;}
   const src=audioCtx.createBufferSource();src.buffer=bradMGBuf;
-  const g=audioCtx.createGain();g.gain.value=Math.max(0,Math.min(1,vol*0.5));
+  const g=audioCtx.createGain();g.gain.value=Math.max(0,Math.min(1,vol*0.25));
   src.connect(g);g.connect(audioCtx.destination);src.start();
 }
 function playExplosion(){if(!audioCtx)return;const t=audioCtx.currentTime;const bufSize=audioCtx.sampleRate*0.4;const buf=audioCtx.createBuffer(1,bufSize,audioCtx.sampleRate);const d=buf.getChannelData(0);for(let i=0;i<bufSize;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/bufSize,2);const src=audioCtx.createBufferSource();src.buffer=buf;const g=audioCtx.createGain();g.gain.setValueAtTime(0.4,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.4);const f=audioCtx.createBiquadFilter();f.type='lowpass';f.frequency.value=600;src.connect(f);f.connect(g);g.connect(audioCtx.destination);src.start(t);}
 const SCALE=0.13;
 const GROUND_TILE=512;const GROUND_SCALE=0.42; // zemin tile boyutu ve ölçek      // yeni tank büyük olduğu için daha küçük ölçek
 const FAC_SCALE=0.42;   // kışla ölçeği
-const MAP_W=3600,MAP_H=2400;
+const MAP_W=9000,MAP_H=6000;
 const cam={x:0,y:0,zoom:1.25};
 function clampCam(){cam.x=Math.max(0,Math.min(MAP_W-VW/cam.zoom,cam.x));cam.y=Math.max(0,Math.min(MAP_H-VH/cam.zoom,cam.y));}
 function w2s(wx,wy){return [(wx-cam.x)*cam.zoom,(wy-cam.y)*cam.zoom];}
@@ -362,8 +360,8 @@ window.addEventListener('load',()=>{
 });
 
 // === KIŞLA (üretim binası) ===
-const factory={x:500,y:1000, w:FAC_W*FAC_SCALE, h:FAC_H*FAC_SCALE, buildQueue:[], buildTimer:0, selected:false, rallyX:500, rallyY:1300};
-const enemyFactory={x:MAP_W-500,y:MAP_H-1000,w:FAC_W*FAC_SCALE,h:FAC_H*FAC_SCALE,spawnTimer:0,resources:200};
+const factory={x:700,y:900, w:FAC_W*FAC_SCALE, h:FAC_H*FAC_SCALE, buildQueue:[], buildTimer:0, selected:false, rallyX:700, rallyY:1300};
+const enemyFactory={x:MAP_W-700,y:MAP_H-900,w:FAC_W*FAC_SCALE,h:FAC_H*FAC_SCALE,spawnTimer:0,resources:200};
 
 function makeTank(x,y,team){
   return {x,y,tx:x,ty:y,team,unitType:'tank',hp:STATS.maxHp,maxHp:STATS.maxHp,
@@ -421,11 +419,11 @@ let tanks=[];const wrecks=[];let waveNum=0,waveTimer=400;
 function setup(){
   tanks=[];wrecks.length=0;resources=1000;waveNum=0;waveTimer=400;
   factory.buildQueue=[];factory.buildTimer=0;
-  for(let i=0;i<3;i++)tanks.push(makeTank(620+(i%2)*80,1150+Math.floor(i/2)*100,'player'));
+  for(let i=0;i<3;i++)tanks.push(makeTank(800+(i%2)*80,1100+Math.floor(i/2)*100,'player'));
   spawnEnemyWave(2);
-  cam.x=200;cam.y=750;clampCam();
+  cam.x=300;cam.y=600;clampCam();
 }
-function spawnEnemyWave(n){waveNum++;for(let i=0;i<n;i++){const ex=MAP_W-300-Math.random()*200,ey=400+Math.random()*(MAP_H-800);tanks.push(makeTank(ex,ey,'enemy'));}flashStatus(`⚔️ Düşman dalgası ${waveNum}! (${n} tank)`);}
+function spawnEnemyWave(n){waveNum++;for(let i=0;i<n;i++){const ex=MAP_W-600-Math.random()*300,ey=MAP_H-1200-Math.random()*600;tanks.push(makeTank(ex,ey,'enemy'));}flashStatus(`⚔️ Düşman dalgası ${waveNum}! (${n} tank)`);}
 
 let statusFlash='',statusFlashT=0;
 function flashStatus(m){statusFlash=m;statusFlashT=180;}
@@ -505,21 +503,31 @@ function angleDiff(tg,cur){let d=tg-cur;while(d>Math.PI)d-=Math.PI*2;while(d<-Ma
 
 let pointers=new Map();
 let selectMode=false,holdTimer=null;let dragStart=null,camStart=null,didDrag=false,pinchStart=null,selBox=null,lastTapTime=0;
+let minimapDragging=false;
 canvas.addEventListener('pointerdown',e=>{
   initAudio();
   pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  // MINIMAP'e dokunma: kamerayi oraya tasi (oyun komutu verme)
+  if(pointers.size===1 && minimapHit(e.clientX,e.clientY)){
+    minimapDragging=true;
+    minimapJump(e.clientX,e.clientY);
+    if(holdTimer){clearTimeout(holdTimer);holdTimer=null;}
+    return;
+  }
   if(pointers.size===1){
     dragStart={x:e.clientX,y:e.clientY};camStart={x:cam.x,y:cam.y};didDrag=false;
     selBox=null; selectMode=false;
     // basılı tut (350ms hareketsiz) -> seçim moduna geç
     if(holdTimer)clearTimeout(holdTimer);
-    holdTimer=setTimeout(()=>{ if(pointers.size===1&&!didDrag){selectMode=true;selBox={x0:dragStart.x,y0:dragStart.y,x1:dragStart.x,y1:dragStart.y};if(navigator.vibrate)navigator.vibrate(30);} },350);
+    holdTimer=setTimeout(()=>{ if(pointers.size===1&&!didDrag&&!minimapDragging){selectMode=true;selBox={x0:dragStart.x,y0:dragStart.y,x1:dragStart.x,y1:dragStart.y};if(navigator.vibrate)navigator.vibrate(30);} },350);
   }
   else if(pointers.size===2){const p=[...pointers.values()];pinchStart={d:Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y),zoom:cam.zoom};selBox=null;selectMode=false;if(holdTimer)clearTimeout(holdTimer);}
 });
 canvas.addEventListener('pointermove',e=>{
   if(!pointers.has(e.pointerId))return;pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
-  if(pointers.size===2&&pinchStart){const p=[...pointers.values()];const d=Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y);const mid={x:(p[0].x+p[1].x)/2,y:(p[0].y+p[1].y)/2};cam.zoom=Math.max(0.7,Math.min(2.4,pinchStart.zoom*(d/pinchStart.d)));if(pinchStart.mid){cam.x+=(pinchStart.mid.x-mid.x)/cam.zoom;cam.y+=(pinchStart.mid.y-mid.y)/cam.zoom;}pinchStart.mid=mid;clampCam();didDrag=true;}
+  // MINIMAP surukleme: kamera takip etsin
+  if(minimapDragging){minimapJump(e.clientX,e.clientY);return;}
+  if(pointers.size===2&&pinchStart){const p=[...pointers.values()];const d=Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y);const mid={x:(p[0].x+p[1].x)/2,y:(p[0].y+p[1].y)/2};cam.zoom=Math.max(0.4,Math.min(2.4,pinchStart.zoom*(d/pinchStart.d)));if(pinchStart.mid){cam.x+=(pinchStart.mid.x-mid.x)/cam.zoom;cam.y+=(pinchStart.mid.y-mid.y)/cam.zoom;}pinchStart.mid=mid;clampCam();didDrag=true;}
   else if(pointers.size===1&&dragStart){
     const dx=e.clientX-dragStart.x,dy=e.clientY-dragStart.y;
     if(Math.abs(dx)>6||Math.abs(dy)>6){didDrag=true;if(holdTimer&&!selectMode){clearTimeout(holdTimer);holdTimer=null;}}
@@ -532,6 +540,8 @@ canvas.addEventListener('pointermove',e=>{
 canvas.addEventListener('pointerup',e=>{
   const wasOne=pointers.size===1;const p=pointers.get(e.pointerId);pointers.delete(e.pointerId);
   if(pinchStart&&pointers.size<2)pinchStart=null;
+  // MINIMAP dokunusu bittiyse: oyun komutu verme
+  if(minimapDragging){minimapDragging=false;dragStart=null;selBox=null;return;}
   if(!wasOne||!p){dragStart=null;selBox=null;return;}
   const now=Date.now();
   // oyun bittiyse (yenildi/kazandı) dokununca yeniden başla
@@ -615,21 +625,25 @@ function update(){
   for(const b of bullets){let best=null,bd=999;for(const t of tanks){if(t.alive&&t.team!==b.team){const d=dist(b.x,b.y,t.x,t.y);if(d<bd&&d<60){bd=d;best=t;}}}if(best)best.incomingDmg+=b.dmg;}
   // düşman kışlası tank üretir
   // DALGA HALİNDE SALDIRI: yeterli birim biriktiyse toplu saldır
-  enemyFactory.waveSize=enemyFactory.waveSize||5; // her dalga için minimum birim
+  enemyFactory.waveSize=enemyFactory.waveSize||4; // ilk dalga icin minimum birim
   const reserves=tanks.filter(t=>t.alive&&t.team==='enemy'&&!t.focusTarget&&!t.hasOrder);
   if(reserves.length>=enemyFactory.waveSize){
-    // DALGA BAŞLA: hepsini oyuncu üssüne yolla
-    reserves.forEach(t=>{
-      t.tx=factory.x+(Math.random()-0.5)*180;
-      t.ty=factory.y+(Math.random()-0.5)*120;
-      t.homeX=t.tx;t.homeY=t.ty; // saldırı sırasında ev = hedef
+    // DALGA BAŞLA: hepsini TOPLU halde oyuncu ussune yolla (izgara formasyon)
+    const n=reserves.length;const cols=Math.ceil(Math.sqrt(n));const sp=STATS.radius*2.6;
+    const baseX=factory.x, baseY=factory.y+factory.h/2+100;
+    reserves.forEach((t,i)=>{
+      const col=i%cols, row=Math.floor(i/cols);
+      t.tx=baseX+(col-(cols-1)/2)*sp;
+      t.ty=baseY+(row-(cols-1)/2)*sp;
+      t.homeX=t.tx;t.homeY=t.ty; // saldiri sirasinda ev = hedef
       t.hasOrder=true;
     });
-    enemyFactory.waveSize=Math.min(15,enemyFactory.waveSize+1); // bir sonraki dalga biraz daha büyük
+    flashStatus('⚔️ Düşman dalgası saldırıyor! ('+n+' birim)');
+    enemyFactory.waveSize=Math.min(18,enemyFactory.waveSize+2); // sonraki dalga daha buyuk
   }
   enemyFactory.resources+=0.15; // düşman da kaynak kazanır
   enemyFactory.spawnTimer++;
-  if(enemyFactory.spawnTimer>=180 && enemyFactory.resources>=50){
+  if(enemyFactory.spawnTimer>=150 && enemyFactory.resources>=50){
     // RASTGELE birim seç: %40 tank, %20 bradley, %20 heli, %20 asker (combined arms)
     const roll=Math.random();let cost,maker;
     if(roll<0.4 && enemyFactory.resources>=100){cost=100;maker=makeTank;}
@@ -663,7 +677,22 @@ function update(){
       t.focusTarget=null;
       const ne=nearestEnemy(t); tg=ne.e; td=ne.d;
     }
-    if(t.team==='enemy'){if(tg){if(td>STATS.range*0.82){t.tx=tg.x;t.ty=tg.y;}else{t.tx=t.x;t.ty=t.y;}}}
+    if(t.team==='enemy'){
+      if(t.hasOrder){
+        // DALGA EMRI VAR: hedefe saldir (focusTarget veya en yakin dusman)
+        if(tg){if(td>STATS.range*0.82){t.tx=tg.x;t.ty=tg.y;}else{t.tx=t.x;t.ty=t.y;}}
+      } else {
+        // BEKLEMEDE (rally): sadece cok yakin dusman varsa savun, yoksa bekle
+        const defendRange=(t.unitType==='heli'?(t.range||420):(t.unitType==='bradley'?t.range:STATS.range))*0.9;
+        const homeDist=Math.hypot(t.x-t.homeX,t.y-t.homeY);
+        if(tg && td<=defendRange && homeDist<150){
+          if(td>defendRange*0.85){t.tx=tg.x;t.ty=tg.y;}else{t.tx=t.x;t.ty=t.y;}
+        } else {
+          // rally noktasinda bekle
+          if(homeDist>30){t.tx=t.homeX;t.ty=t.homeY;}else{t.tx=t.x;t.ty=t.y;}
+        }
+      }
+    }
     else{
       // OYUNCU birimi — DEFENSIVE STANCE (Age of Empires II tarzı):
       // Düşmanı belli mesafeye kadar takip eder, leash dışına çıkmaz, sonra eve döner
@@ -854,7 +883,11 @@ function update(){
         const willHit=Math.random()<0.78;let aimAng=t.turretAngle;if(!willHit)aimAng+=(Math.random()-0.5)*0.2;
         bullets.push({x:mx,y:my,vx:Math.cos(aimAng)*20,vy:Math.sin(aimAng)*20,team:t.team,dmg:t.mgDmg,life:60,willHit,kind:'mg'});
         t.fireMGCD=t.mgFireRate;t.mgRecoil=3;t.flashMG=4;t.flashMGFrame=0;
-        if(t.team==='player')playBradMG(0.6);
+        if(t.team==='player'&&Math.random()<0.4){
+          const camCX=cam.x+VW/cam.zoom/2,camCY=cam.y+VH/cam.zoom/2;
+          const sd=dist(t.x,t.y,camCX,camCY);const mgVol=Math.max(0,1-sd/800);
+          if(mgVol>0.05)playBradMG(mgVol);
+        }
       }
     } else if(tg && td<=STATS.range*1.15 && t.unitType==='tank'){
       // SADECE TANK: kule çevir ve ateş et (chinook, soldier, heli buraya girmesin)
@@ -1366,9 +1399,11 @@ function draw(){
 }
 
 // === MİNİ HARİTA (sağ üst) ===
+let minimapRect={mx:0,my:0,mw:0,mh:0};
 function drawMinimap(){
-  const mw=120, mh=mw*MAP_H/MAP_W;
+  const mw=150, mh=mw*MAP_H/MAP_W;
   const mx=VW-mw-8, my=70; // HUD'un altına
+  minimapRect={mx,my,mw,mh}; // tiklama icin sakla
   // arka plan
   ctx.fillStyle='rgba(20,28,18,0.8)';ctx.fillRect(mx-3,my-3,mw+6,mh+6);
   ctx.fillStyle='rgba(90,105,70,0.9)';ctx.fillRect(mx,my,mw,mh);
@@ -1379,8 +1414,19 @@ function drawMinimap(){
   // birimler
   for(const t of tanks){if(!t.alive)continue;ctx.fillStyle=t.team==='player'?'#5cff7a':'#ff5c5c';ctx.fillRect(mx+t.x*sx-1.5,my+t.y*sy-1.5,3,3);}
   // kamera görüş alanı çerçevesi
-  ctx.strokeStyle='rgba(255,255,255,0.7)';ctx.lineWidth=1;
+  ctx.strokeStyle='rgba(255,255,255,0.7)';ctx.lineWidth=1.5;
   ctx.strokeRect(mx+cam.x*sx,my+cam.y*sy,(VW/cam.zoom)*sx,(VH/cam.zoom)*sy);
+}
+// Minimap'e dokunma kontrolu - verilen ekran noktasi minimap icinde mi?
+function minimapHit(px,py){
+  const r=minimapRect;
+  return px>=r.mx&&px<=r.mx+r.mw&&py>=r.my&&py<=r.my+r.mh;
+}
+// Minimap noktasini dunya koordinatina cevir ve kamerayi oraya tasi
+function minimapJump(px,py){
+  const r=minimapRect;
+  const wx=(px-r.mx)/r.mw*MAP_W, wy=(py-r.my)/r.mh*MAP_H;
+  cam.x=wx-VW/cam.zoom/2; cam.y=wy-VH/cam.zoom/2; clampCam();
 }
 setup();
 let lastTime=0;
