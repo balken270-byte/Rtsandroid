@@ -121,6 +121,7 @@ const hullImg=new Image();hullImg.src=HULL;
 const turretImg=new Image();turretImg.src=TURRET;
 const facImg=new Image();facImg.crossOrigin="anonymous";facImg.src=FACTORY;
 const groundImg=new Image();let groundPattern=null;groundImg.onload=()=>{groundPattern=ctx.createPattern(groundImg,'repeat');};groundImg.src=GROUND;
+const airportImg=new Image();airportImg.src=AIRPORT_IMG;
 const eHullImg=new Image();eHullImg.src=EHULL;
 const eTurImg=new Image();eTurImg.src=ETURRET;
 const heliImg=new Image();heliImg.src=HELI;
@@ -355,12 +356,20 @@ window.addEventListener('load',()=>{
 const factory={x:700,y:900, w:FAC_W*FAC_SCALE, h:FAC_H*FAC_SCALE, buildQueue:[], buildTimer:0, selected:false, rallyX:700, rallyY:1300};
 const enemyFactory={x:MAP_W-700,y:MAP_H-900,w:FAC_W*FAC_SCALE,h:FAC_H*FAC_SCALE,spawnTimer:0,resources:200};
 // === HAVALİMANI (CH-47 üretim + pist) ===
-// Ussun yaninda, pist seklinde bina. CH-47 burada dogar, pistte bekler.
-const AIRPORT_W=520, AIRPORT_H=300; // pist boyutu (dunya px)
-const airport={x:700, y:1500, w:AIRPORT_W, h:AIRPORT_H, buildQueue:[], buildTimer:0, selected:false,
-  // pist park noktalari (CH-47'ler burada bekler)
-  pads:[ {x:700-120,y:1500,occupied:false}, {x:700,y:1500,occupied:false}, {x:700+120,y:1500,occupied:false} ]
-};
+// Gercek gorsel: assets/images/building/airport.png (oran ~1.94:1)
+// Ussun yaninda, tam askeri havalimani (pist + hangar + helipad)
+const AIRPORT_IMG="assets/images/building/airport.png";
+const AIRPORT_W=900, AIRPORT_H=464; // dunya px (gorsel orani 1.94:1)
+const airport={x:1200, y:1850, w:AIRPORT_W, h:AIRPORT_H, buildQueue:[], buildTimer:0, selected:false, pads:[]};
+// Ped konumlari gorseldeki "H" isaretlerine gore (rel: x=0.585/0.662/0.738, y=0.415)
+function _initAirportPads(){
+  airport.pads=[
+    {x:airport.x+(0.585-0.5)*airport.w, y:airport.y+(0.415-0.5)*airport.h, occupied:false},
+    {x:airport.x+(0.662-0.5)*airport.w, y:airport.y+(0.415-0.5)*airport.h, occupied:false},
+    {x:airport.x+(0.738-0.5)*airport.w, y:airport.y+(0.415-0.5)*airport.h, occupied:false},
+  ];
+}
+_initAirportPads();
 
 function makeTank(x,y,team){
   return {x,y,tx:x,ty:y,team,unitType:'tank',hp:STATS.maxHp,maxHp:STATS.maxHp,
@@ -422,10 +431,10 @@ function setup(){
   tanks=[];wrecks.length=0;resources=1000;waveNum=0;waveTimer=400;
   factory.buildQueue=[];factory.buildTimer=0;
   airport.buildQueue=[];airport.buildTimer=0;airport.selected=false;
-  airport.pads.forEach(p=>p.occupied=false);
+  _initAirportPads();
   for(let i=0;i<3;i++)tanks.push(makeTank(800+(i%2)*80,1100+Math.floor(i/2)*100,'player'));
   spawnEnemyWave(2);
-  cam.x=300;cam.y=600;clampCam();
+  cam.x=400;cam.y=900;clampCam();
 }
 function spawnEnemyWave(n){waveNum++;for(let i=0;i<n;i++){const ex=MAP_W-600-Math.random()*300,ey=MAP_H-1200-Math.random()*600;tanks.push(makeTank(ex,ey,'enemy'));}flashStatus(`⚔️ Düşman dalgası ${waveNum}! (${n} tank)`);}
 
@@ -1374,37 +1383,26 @@ function drawAirport(){
   const z=cam.zoom;
   const [sx,sy]=w2s(airport.x,airport.y);
   const aw=airport.w*z, ah=airport.h*z;
-  // ASFALT ZEMİN (koyu gri pist)
-  ctx.save();
-  ctx.fillStyle='#2b2e33';ctx.fillRect(sx-aw/2,sy-ah/2,aw,ah);
-  ctx.strokeStyle='#4a4d52';ctx.lineWidth=2*z;ctx.strokeRect(sx-aw/2,sy-ah/2,aw,ah);
-  // PİST ŞERİT ÇİZGİLERİ (kesikli sarı orta çizgi)
-  ctx.strokeStyle='rgba(220,200,80,0.55)';ctx.lineWidth=3*z;ctx.setLineDash([16*z,12*z]);
-  ctx.beginPath();ctx.moveTo(sx-aw/2+20*z,sy);ctx.lineTo(sx+aw/2-20*z,sy);ctx.stroke();ctx.setLineDash([]);
-  // PARK PEDLERİ (H işaretli daireler)
-  for(const pad of airport.pads){
-    const [px,py]=w2s(pad.x,pad.y);
-    ctx.strokeStyle='rgba(255,255,255,0.6)';ctx.lineWidth=2*z;
-    ctx.beginPath();ctx.arc(px,py,40*z,0,Math.PI*2);ctx.stroke();
-    // H harfi
-    ctx.strokeStyle='rgba(255,255,255,0.8)';ctx.lineWidth=4*z;
-    ctx.beginPath();
-    ctx.moveTo(px-12*z,py-16*z);ctx.lineTo(px-12*z,py+16*z);
-    ctx.moveTo(px+12*z,py-16*z);ctx.lineTo(px+12*z,py+16*z);
-    ctx.moveTo(px-12*z,py);ctx.lineTo(px+12*z,py);
-    ctx.stroke();
+  // GÖLGE (hafif, zemine otursun)
+  if(airportImg.complete){
+    ctx.save();ctx.globalAlpha=0.3;ctx.filter='brightness(0)';
+    ctx.drawImage(airportImg,sx-aw/2+5*z,sy-ah/2+5*z,aw,ah);
+    ctx.filter='none';ctx.restore();
   }
-  ctx.restore();
-  // ETİKET
-  ctx.fillStyle='#cfe8ff';ctx.font=`bold ${13*z}px sans-serif`;ctx.textAlign='center';
-  ctx.fillText('🛬 HAVALİMANI',sx,sy-ah/2-8*z);
+  // HAVALİMANI görseli
+  if(airportImg.complete){
+    ctx.drawImage(airportImg,sx-aw/2,sy-ah/2,aw,ah);
+  } else {
+    // gorsel yuklenene kadar gri kutu
+    ctx.fillStyle='#2b2e33';ctx.fillRect(sx-aw/2,sy-ah/2,aw,ah);
+  }
   // SEÇİM çerçevesi
   if(airport.selected){ctx.strokeStyle='#7fff9f';ctx.lineWidth=2;ctx.setLineDash([8,5]);ctx.strokeRect(sx-aw/2,sy-ah/2,aw,ah);ctx.setLineDash([]);}
   // ÜRETİM göstergesi
   if(airport.buildQueue.length>0){const prog=airport.buildTimer/360;
-    ctx.fillStyle='rgba(0,0,0,0.6)';ctx.fillRect(sx-30*z,sy-ah/2-26*z,60*z,7*z);
-    ctx.fillStyle='#cfffaf';ctx.fillRect(sx-30*z,sy-ah/2-26*z,60*z*prog,7*z);
-    ctx.fillStyle='#cfffaf';ctx.font=`${11*z}px sans-serif`;ctx.fillText('🚁 '+airport.buildQueue.length,sx,sy-ah/2-30*z);}
+    ctx.fillStyle='rgba(0,0,0,0.6)';ctx.fillRect(sx-30*z,sy-ah/2-20*z,60*z,7*z);
+    ctx.fillStyle='#cfffaf';ctx.fillRect(sx-30*z,sy-ah/2-20*z,60*z*prog,7*z);
+    ctx.fillStyle='#cfffaf';ctx.font=`${11*z}px sans-serif`;ctx.textAlign='center';ctx.fillText('🚁 '+airport.buildQueue.length,sx,sy-ah/2-24*z);}
 }
 function draw(){
   ctx.save();if(shake>0.2)ctx.translate((Math.random()-0.5)*shake,(Math.random()-0.5)*shake);
