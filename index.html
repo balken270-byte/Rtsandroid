@@ -150,22 +150,11 @@ function initAudio(){
   _loadBradSounds();
   _initHeliSound();
 }
-// HELİKOPTER PERVANE SESİ (sürekli uğultu, heli sayısına göre)
+// HELİKOPTER PERVANE SESİ - KAPALI (LFO surekli ugultu bug'ina yol aciyordu)
 let heliGain=null,heliOsc=null,heliLFO=null;
 function _initHeliSound(){
-  if(!audioCtx||heliGain)return;
-  try{
-    heliGain=audioCtx.createGain();heliGain.gain.value=0;heliGain.connect(audioCtx.destination);
-    // ana uğultu (düşük frekans)
-    heliOsc=audioCtx.createOscillator();heliOsc.type='sawtooth';heliOsc.frequency.value=55;
-    const f=audioCtx.createBiquadFilter();f.type='lowpass';f.frequency.value=180;
-    heliOsc.connect(f);f.connect(heliGain);
-    // LFO: pervane "vual vual" dalgalanması
-    heliLFO=audioCtx.createOscillator();heliLFO.type='sine';heliLFO.frequency.value=11; // pervane çırpma hızı
-    const lfoGain=audioCtx.createGain();lfoGain.gain.value=0.5;
-    heliLFO.connect(lfoGain);lfoGain.connect(heliGain.gain);
-    heliOsc.start();heliLFO.start();
-  }catch(e){}
+  // Devre disi - heli ugultusu artik uretilmiyor
+  return;
 }
 ['pointerdown','touchstart','click'].forEach(ev=>document.addEventListener(ev,initAudio,{once:false}));
 let engNode=null,engGain=null;
