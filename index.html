@@ -121,7 +121,6 @@ const hullImg=new Image();hullImg.src=HULL;
 const turretImg=new Image();turretImg.src=TURRET;
 const facImg=new Image();facImg.crossOrigin="anonymous";facImg.src=FACTORY;
 const groundImg=new Image();let groundPattern=null;groundImg.onload=()=>{groundPattern=ctx.createPattern(groundImg,'repeat');};groundImg.src=GROUND;
-const airportImg=new Image();airportImg.src=AIRPORT_IMG;
 const eHullImg=new Image();eHullImg.src=EHULL;
 const eTurImg=new Image();eTurImg.src=ETURRET;
 const heliImg=new Image();heliImg.src=HELI;
@@ -359,6 +358,7 @@ const enemyFactory={x:MAP_W-700,y:MAP_H-900,w:FAC_W*FAC_SCALE,h:FAC_H*FAC_SCALE,
 // Gercek gorsel: assets/images/building/airport.png (oran ~1.94:1)
 // Ussun yaninda, tam askeri havalimani (pist + hangar + helipad)
 const AIRPORT_IMG="assets/images/building/airport.png";
+const airportImg=new Image();airportImg.src=AIRPORT_IMG;
 const AIRPORT_W=900, AIRPORT_H=463; // dunya px (gorsel orani 1.94:1)
 const airport={x:1200, y:1850, w:AIRPORT_W, h:AIRPORT_H, buildQueue:[], buildTimer:0, selected:false, pads:[]};
 // Ped konumlari gorseldeki "H" isaretlerine gore (rel: x=0.585/0.662/0.738, y=0.415)
