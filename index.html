@@ -19,7 +19,7 @@
   #pauseOverlay.show { display:flex; }
   #pauseOverlay h1 { font-size:28px; }
   #pauseOverlay button { background:#2c6fa3; color:#fff; border:none; border-radius:12px; padding:14px 32px; font-size:18px; }
-</style></head><body><div id="hud">RTS <b>v4.5</b> — Denge güncellemesi · <b>build 7</b></div>
+</style></head><body><div id="hud">RTS <b>v4.5</b> — Köşe geçişleri · <b>build 8</b></div>
 <div id="build">
   <button id="bTank" class="active">🔧 Tank<br>100</button>
   <button id="bHeli">🚁 Heli<br>150</button>
@@ -1838,6 +1838,58 @@ function draw(){
         ctx.rotate(edgeDirs[d].rot);
         ctx.drawImage(img,-cellW/2-1,-cellH/2-1,cellW+2,cellH+2);
         ctx.restore();
+      }
+    }
+  }
+  // 3) KÖŞE GEÇİŞLERİ (outer/inner) — basamakları yumuşat (doğrulanmış rotasyonlar)
+  // OUTER ref: komşu(yüksek) SAĞ-ALT köşede, iki ortogonal komşu düşük -> rot 0
+  // INNER ref: self(düşük) SAĞ-ÜST burun, komşu ÜST+SAĞ yüksek -> rot 0
+  const D90=Math.PI/2;
+  // OUTER: {çapraz dx,dy} {ort1 dx,dy} {ort2 dx,dy} rot
+  const outerC=[
+    {dax:1,day:1,  o1x:1,o1y:0, o2x:0,o2y:1,  rot:0},     // SAĞ-ALT
+    {dax:-1,day:1, o1x:-1,o1y:0,o2x:0,o2y:1,  rot:D90},   // SOL-ALT
+    {dax:-1,day:-1,o1x:-1,o1y:0,o2x:0,o2y:-1, rot:Math.PI},// SOL-ÜST
+    {dax:1,day:-1, o1x:1,o1y:0, o2x:0,o2y:-1, rot:-D90},  // SAĞ-ÜST
+  ];
+  // INNER: iki ortogonal komşu yüksek -> self burnu. {ort1}{ort2} rot
+  const innerC=[
+    {a1x:0,a1y:-1, a2x:1,a2y:0,  rot:0},      // ÜST+SAĞ -> self SAĞ-ÜST burun
+    {a1x:1,a1y:0,  a2x:0,a2y:1,  rot:-D90},   // SAĞ+ALT
+    {a1x:0,a1y:1,  a2x:-1,a2y:0, rot:Math.PI},// ALT+SOL
+    {a1x:-1,a1y:0, a2x:0,a2y:-1, rot:D90},    // SOL+ÜST
+  ];
+  for(let gy=gy0;gy<gy1;gy++){
+    for(let gx=gx0;gx<gx1;gx++){
+      const self=at(gx,gy);
+      const [px,py]=w2s(gx*islandCellW,gy*islandCellH);
+      const cx=px+cellW/2, cy=py+cellH/2;
+      // OUTER köşeler
+      for(const c of outerC){
+        const diag=at(gx+c.dax,gy+c.day);
+        const o1=at(gx+c.o1x,gy+c.o1y), o2=at(gx+c.o2x,gy+c.o2y);
+        if(prio[o1]<=prio[self] && prio[o2]<=prio[self] && prio[diag]>prio[self]){
+          const pair=transPair(self,diag);
+          if(!pair)continue;
+          const img=transImgs[pair+'_outer'];
+          if(!img||!img.complete||!img.naturalWidth)continue;
+          ctx.save();ctx.translate(cx,cy);ctx.rotate(c.rot);
+          ctx.drawImage(img,-cellW/2-1,-cellH/2-1,cellW+2,cellH+2);
+          ctx.restore();
+        }
+      }
+      // INNER köşeler
+      for(const c of innerC){
+        const n1=at(gx+c.a1x,gy+c.a1y), n2=at(gx+c.a2x,gy+c.a2y);
+        if(prio[n1]>prio[self] && prio[n2]>prio[self] && n1===n2){
+          const pair=transPair(self,n1);
+          if(!pair)continue;
+          const img=transImgs[pair+'_inner'];
+          if(!img||!img.complete||!img.naturalWidth)continue;
+          ctx.save();ctx.translate(cx,cy);ctx.rotate(c.rot);
+          ctx.drawImage(img,-cellW/2-1,-cellH/2-1,cellW+2,cellH+2);
+          ctx.restore();
+        }
       }
     }
   }
