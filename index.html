@@ -137,9 +137,18 @@ const hullImg=new Image();hullImg.src=HULL;
 const turretImg=new Image();turretImg.src=TURRET;
 const facImg=new Image();facImg.crossOrigin="anonymous";facImg.src=FACTORY;
 const groundImg=new Image();let groundPattern=null;groundImg.onload=()=>{groundPattern=ctx.createPattern(groundImg,'repeat');};groundImg.src=GROUND;
-// ENGEL gorselleri (kaya/agac/su)
+// ENGEL gorselleri (kaya/agac)
 const obsImgs={};
-['rock1','rock2','rock3','tree1','tree2','water1'].forEach(n=>{const im=new Image();im.src='assets/images/terrain/'+n+'.png';obsImgs[n]=im;});
+['rock1','rock2','rch3','tree1','tree2'].forEach(n=>{const im=new Image();im.src='assets/images/terrain/'+n.replace('rch3','rock3')+'.png';obsImgs[n.replace('rch3','rock3')]=im;});
+// ZEMİN BÖLGE DOKULARI (cimen/kum/tas/su) - ada grid'i icin pattern
+const terrainPats={};
+const terrainImgs={};
+['grass','sand','stone','dirt','water'].forEach(n=>{
+  const im=new Image();
+  im.onload=()=>{terrainPats[n]=ctx.createPattern(im,'repeat');};
+  im.src='assets/images/terrain/'+n+'.jpg';
+  terrainImgs[n]=im;
+});
 const eHullImg=new Image();eHullImg.src=EHULL;
 const eTurImg=new Image();eTurImg.src=ETURRET;
 const heliImg=new Image();heliImg.src=HELI;
@@ -1143,18 +1152,18 @@ function update(){
   for(const t of tanks){
     if(!t.alive)continue;
     if(t.unitType==='heli'||t.unitType==='chinook')continue; // hava birimleri her seyi asar
-    // SU: kara birimi suya girerse en yakin karaya geri it
+    // SU: kara birimi suya girerse en yakin karaya yumusak it
     if(isWater(t.x,t.y)){
-      // 8 yonde en yakin karayi ara
-      let bestX=t.x,bestY=t.y,found=false,bd=1e9;
+      let bx2=0,by2=0,found=false,bd=1e9;
       for(let a=0;a<16;a++){
         const ang=a/16*Math.PI*2;
-        for(let dd=40;dd<=400;dd+=40){
+        for(let dd=30;dd<=350;dd+=30){
           const cx=t.x+Math.cos(ang)*dd, cy=t.y+Math.sin(ang)*dd;
-          if(isLand(cx,cy)&&dd<bd){bd=dd;bestX=cx;bestY=cy;found=true;break;}
+          if(isLand(cx,cy)&&dd<bd){bd=dd;bx2=Math.cos(ang);by2=Math.sin(ang);found=true;break;}
         }
       }
-      if(found){const ang=Math.atan2(bestY-t.y,bestX-t.x);t.x+=Math.cos(ang)*6;t.y+=Math.sin(ang)*6;}
+      if(found){t.x+=bx2*4;t.y+=by2*4;} // yumusak itme
+      else{t.x=t.homeX||t.x;t.y=t.homeY||t.y;} // hic kara yoksa eve don
     }
     for(const o of obstacles){
       const minD=o.r+STATS.radius;
@@ -1605,41 +1614,35 @@ function drawGroundDetails(){
 }
 function drawIslandWater(){
   const z=cam.zoom;
-  // gorunur hucre araligini hesapla (performans)
   const x0=Math.max(0,Math.floor(cam.x/islandCellW)-1);
   const y0=Math.max(0,Math.floor(cam.y/islandCellH)-1);
   const x1=Math.min(ISLAND_GW,Math.ceil((cam.x+VW/z)/islandCellW)+1);
   const y1=Math.min(ISLAND_GH,Math.ceil((cam.y+VH/z)/islandCellH)+1);
-  // su hucrelerini ciz
-  for(let gy=y0;gy<y1;gy++){
-    for(let gx=x0;gx<x1;gx++){
-      if(+ISLAND_DATA[gy*ISLAND_GW+gx]!==0)continue; // su degil
-      const wx=gx*islandCellW, wy=gy*islandCellH;
-      const [sx,sy]=w2s(wx,wy);
-      const cw=islandCellW*z+1, ch=islandCellH*z+1;
-      // derinlik: cevredeki su sayisina gore (kenar daha acik)
-      ctx.fillStyle='#1d3a4a';
-      ctx.fillRect(sx,sy,cw,ch);
-    }
-  }
-  // KIYI çizgisi + dalga (su-kara siniri)
-  ctx.strokeStyle='rgba(130,180,190,0.25)';ctx.lineWidth=2*z;
+  const wimg=terrainImgs['water'];
+  const cw=islandCellW*z, ch=islandCellH*z;
+  // su hucreleri (gercek su dokusu)
   for(let gy=y0;gy<y1;gy++){
     for(let gx=x0;gx<x1;gx++){
       if(+ISLAND_DATA[gy*ISLAND_GW+gx]!==0)continue;
-      const wx=gx*islandCellW, wy=gy*islandCellH;
-      const [sx,sy]=w2s(wx,wy);
-      const cw=islandCellW*z, ch=islandCellH*z;
-      // komsu kara mi? kenar ciz
-      const land=(ddx,ddy)=>{const nx=gx+ddx,ny=gy+ddy;if(nx<0||nx>=ISLAND_GW||ny<0||ny>=ISLAND_GH)return false;return +ISLAND_DATA[ny*ISLAND_GW+nx]!==0?false:true;};
-      // aslinda komsu KARA ise kiyi
-      const isLandN=(ddx,ddy)=>{const nx=gx+ddx,ny=gy+ddy;if(nx<0||nx>=ISLAND_GW||ny<0||ny>=ISLAND_GH)return false;return +ISLAND_DATA[ny*ISLAND_GW+nx]!==0;};
-      ctx.beginPath();
-      if(isLandN(0,-1)){ctx.moveTo(sx,sy);ctx.lineTo(sx+cw,sy);}
-      if(isLandN(0,1)){ctx.moveTo(sx,sy+ch);ctx.lineTo(sx+cw,sy+ch);}
-      if(isLandN(-1,0)){ctx.moveTo(sx,sy);ctx.lineTo(sx,sy+ch);}
-      if(isLandN(1,0)){ctx.moveTo(sx+cw,sy);ctx.lineTo(sx+cw,sy+ch);}
-      ctx.stroke();
+      const [sx,sy]=w2s(gx*islandCellW,gy*islandCellH);
+      if(wimg&&wimg.complete)ctx.drawImage(wimg,sx,sy,cw+1,ch+1);
+      else{ctx.fillStyle='#1d3a4a';ctx.fillRect(sx,sy,cw+1,ch+1);}
+    }
+  }
+  // KIYI gecisi: su-kara siniri yumusatma (kumlu kiyi seridi)
+  const isW=(gx,gy)=>{if(gx<0||gx>=ISLAND_GW||gy<0||gy>=ISLAND_GH)return true;return +ISLAND_DATA[gy*ISLAND_GW+gx]===0;};
+  for(let gy=y0;gy<y1;gy++){
+    for(let gx=x0;gx<x1;gx++){
+      if(+ISLAND_DATA[gy*ISLAND_GW+gx]!==0)continue; // su hucresinden bak
+      const [sx,sy]=w2s(gx*islandCellW,gy*islandCellH);
+      // komsu KARA ise o kenara kumlu kiyi gradyani ciz
+      ctx.save();
+      // ust komsu kara
+      if(!isW(gx,gy-1)){const g=ctx.createLinearGradient(sx,sy,sx,sy+ch*0.5);g.addColorStop(0,'rgba(200,185,150,0.55)');g.addColorStop(1,'rgba(200,185,150,0)');ctx.fillStyle=g;ctx.fillRect(sx,sy,cw+1,ch*0.5);}
+      if(!isW(gx,gy+1)){const g=ctx.createLinearGradient(sx,sy+ch,sx,sy+ch*0.5);g.addColorStop(0,'rgba(200,185,150,0.55)');g.addColorStop(1,'rgba(200,185,150,0)');ctx.fillStyle=g;ctx.fillRect(sx,sy+ch*0.5,cw+1,ch*0.5);}
+      if(!isW(gx-1,gy)){const g=ctx.createLinearGradient(sx,sy,sx+cw*0.5,sy);g.addColorStop(0,'rgba(200,185,150,0.55)');g.addColorStop(1,'rgba(200,185,150,0)');ctx.fillStyle=g;ctx.fillRect(sx,sy,cw*0.5,ch+1);}
+      if(!isW(gx+1,gy)){const g=ctx.createLinearGradient(sx+cw,sy,sx+cw*0.5,sy);g.addColorStop(0,'rgba(200,185,150,0.55)');g.addColorStop(1,'rgba(200,185,150,0)');ctx.fillStyle=g;ctx.fillRect(sx+cw*0.5,sy,cw*0.5,ch+1);}
+      ctx.restore();
     }
   }
 }
@@ -1697,28 +1700,31 @@ function draw(){
   ctx.save();if(shake>0.2)ctx.translate((Math.random()-0.5)*shake,(Math.random()-0.5)*shake);
   const z=cam.zoom;
   // ZEMİN TEXTURE - iki katman blend (tekrar deseni gizlenir)
-  if(groundPattern){
-    ctx.fillStyle='#3a3228';ctx.fillRect(0,0,VW,VH);
-    // KATMAN 1: ana tile (büyük)
-    const ts1=GROUND_TILE*GROUND_SCALE*z;
-    const sx1=-((cam.x*z)%ts1), sy1=-((cam.y*z)%ts1);
-    for(let x=sx1-ts1;x<VW+ts1;x+=ts1){
-      for(let y=sy1-ts1;y<VH+ts1;y+=ts1){
-        if(groundImg.complete)ctx.drawImage(groundImg,x,y,ts1,ts1);
+  // ADA BÖLGE ZEMİNİ: her hucre tipine gore doku (cimen/kum/tas)
+  ctx.fillStyle='#1d3a4a';ctx.fillRect(0,0,VW,VH); // taban = su rengi
+  const cellW=islandCellW*z, cellH=islandCellH*z;
+  const gx0=Math.max(0,Math.floor(cam.x/islandCellW)-1);
+  const gy0=Math.max(0,Math.floor(cam.y/islandCellH)-1);
+  const gx1=Math.min(ISLAND_GW,Math.ceil((cam.x+VW/z)/islandCellW)+1);
+  const gy1=Math.min(ISLAND_GH,Math.ceil((cam.y+VH/z)/islandCellH)+1);
+  const tname={1:'grass',2:'sand',3:'stone'};
+  // pattern'i dunya-sabit cizmek icin: tum kara bolgeyi tek seferde pattern ile doldur, hucre hucre clip
+  for(let gy=gy0;gy<gy1;gy++){
+    for(let gx=gx0;gx<gx1;gx++){
+      const t=+ISLAND_DATA[gy*ISLAND_GW+gx];
+      if(t===0)continue;
+      const img=terrainImgs[tname[t]||'grass'];
+      const [px,py]=w2s(gx*islandCellW,gy*islandCellH);
+      if(img&&img.complete){
+        // dokuyu hucreye olcekli ciz (256 doku -> hucre boyutu)
+        ctx.drawImage(img,px,py,cellW+1,cellH+1);
+      } else {
+        ctx.fillStyle=t===2?'#9a8862':t===3?'#6b6358':'#5a7048';
+        ctx.fillRect(px,py,cellW+1,cellH+1);
       }
     }
-    // KATMAN 2: küçük tile (yarım boyut, farklı offset, %35 opaklık - tekrar deseni bozulur)
-    ctx.save();ctx.globalAlpha=0.35;
-    const ts2=ts1*0.61; // farklı oran - aynı yerde tekrar etmez
-    const sx2=-((cam.x*z+137)%ts2), sy2=-((cam.y*z+89)%ts2); // offset
-    for(let x=sx2-ts2;x<VW+ts2;x+=ts2){
-      for(let y=sy2-ts2;y<VH+ts2;y+=ts2){
-        if(groundImg.complete)ctx.drawImage(groundImg,x,y,ts2,ts2);
-      }
-    }
-    ctx.restore();
-  } else { ctx.fillStyle='#3a3228';ctx.fillRect(0,0,VW,VH); }
-  // ADA SUYU (gecilemez mavi bolgeler)
+  }
+  // ADA SUYU (gercek su dokusu + kiyi)
   drawIslandWater();
   // ZEMİN DETAYLARI (lekeler, cakil, ot - profesyonel canlilik)
   drawGroundDetails();
