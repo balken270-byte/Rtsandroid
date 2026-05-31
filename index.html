@@ -149,6 +149,25 @@ const terrainImgs={};
   im.src='assets/images/terrain/'+n+'.jpg';
   terrainImgs[n]=im;
 });
+// GEÇİŞ DOKULARI (kenar yumusatma): ust=A, alt=B
+const transImgs={};
+['grass_sand','grass_water','sand_water','grass_stone'].forEach(n=>{
+  const im=new Image();im.src='assets/images/terrain/'+n+'.jpg';transImgs[n]=im;
+});
+// hangi tip ciftine hangi gecis + yon (A ustte): t1->t2
+// terrain kodlari: 0=su,1=cimen,2=kum,3=tas
+function transFor(self,nbr){
+  // self hucresi, nbr komsu. self'in ustte oldugu gecisi don
+  // donen: {img, flip} flip=true ise komsu-self ters
+  const key=self+'_'+nbr;
+  const M={
+    '1_2':['grass_sand',false], '2_1':['grass_sand',true],
+    '1_0':['grass_water',false],'0_1':['grass_water',true],
+    '2_0':['sand_water',false], '0_2':['sand_water',true],
+    '1_3':['grass_stone',false],'3_1':['grass_stone',true],
+  };
+  return M[key]||null;
+}
 const eHullImg=new Image();eHullImg.src=EHULL;
 const eTurImg=new Image();eTurImg.src=ETURRET;
 const heliImg=new Image();heliImg.src=HELI;
@@ -625,7 +644,6 @@ function setup(){
   factory.buildQueue=[];factory.buildTimer=0;
   genObstacles();
   genGroundDetails();
-  buildIslandTerrain(); // yumusak gecisli zemin uret (dokular hazirsa)
   for(let i=0;i<3;i++)tanks.push(makeTank(factory.x+200+(i%2)*80,factory.y+200+Math.floor(i/2)*100,'player'));
   spawnEnemyWave(2);
   cam.x=factory.x-VW/cam.zoom/2;cam.y=factory.y-VH/cam.zoom/2;clampCam();
@@ -1766,7 +1784,6 @@ function drawFactory(){
   if(factory.buildQueue.length>0){const ct=factory.buildQueue[0];const bt=ct==='heli'?240:180;const prog=factory.buildTimer/bt;ctx.fillStyle='rgba(0,0,0,0.6)';ctx.fillRect(sx-30*z,sy-fh/2-14*z,60*z,7*z);ctx.fillStyle='#cfffaf';ctx.fillRect(sx-30*z,sy-fh/2-14*z,60*z*prog,7*z);ctx.fillStyle='#cfffaf';ctx.font=`${11*z}px sans-serif`;ctx.textAlign='center';ctx.fillText((ct==='heli'?'🚁 ':'🔧 ')+factory.buildQueue.length,sx,sy-fh/2-18*z);}
 }
 function draw(){
-  if(!islandTerrainCanvas)buildIslandTerrain(); // dokular yuklenince uret
   ctx.save();if(shake>0.2)ctx.translate((Math.random()-0.5)*shake,(Math.random()-0.5)*shake);
   const z=cam.zoom;
   // ZEMİN TEXTURE - iki katman blend (tekrar deseni gizlenir)
@@ -1778,15 +1795,57 @@ function draw(){
   const gx1=Math.min(ISLAND_GW,Math.ceil((cam.x+VW/z)/islandCellW)+1);
   const gy1=Math.min(ISLAND_GH,Math.ceil((cam.y+VH/z)/islandCellH)+1);
   const tname={1:'grass',2:'sand',3:'stone'};
-  // Onceden uretilmis yumusak gecisli terrain katmanini ciz (offscreen)
-  if(islandTerrainCanvas){
-    const [ox,oy]=w2s(0,0);
-    ctx.drawImage(islandTerrainCanvas, ox, oy, MAP_W*z, MAP_H*z);
+  // 1) Her hucreyi kendi dokusuyla ciz (taban)
+  for(let gy=gy0;gy<gy1;gy++){
+    for(let gx=gx0;gx<gx1;gx++){
+      const t=+ISLAND_DATA[gy*ISLAND_GW+gx];
+      const [px,py]=w2s(gx*islandCellW,gy*islandCellH);
+      const img=t===0?terrainImgs['water']:terrainImgs[tname[t]||'grass'];
+      if(img&&img.complete&&img.naturalWidth){
+        ctx.drawImage(img,Math.floor(px),Math.floor(py),Math.ceil(cellW)+1,Math.ceil(cellH)+1);
+      } else {
+        ctx.fillStyle=t===0?'#1d3a4a':t===2?'#9a8862':t===3?'#6b6358':'#5a7048';
+        ctx.fillRect(Math.floor(px),Math.floor(py),Math.ceil(cellW)+1,Math.ceil(cellH)+1);
+      }
+    }
   }
-  // ADA SUYU (gercek su dokusu + kiyi) - artik terrain canvas icinde, sadece dalga animasyonu
-  drawIslandWater();
+  // 2) GEÇİŞ tile'lari: her hucrenin 4 komsusuna gore kenar yumusatma
+  const at=(gx,gy)=>{if(gx<0||gx>=ISLAND_GW||gy<0||gy>=ISLAND_GH)return 0;return +ISLAND_DATA[gy*ISLAND_GW+gx];};
+  // yon: 0=ust(komsu yukarida),1=sag,2=alt,3=sol. gecis tile ust=self,alt=nbr -> rotasyon
+  const dirVec=[[0,-1],[1,0],[0,1],[-1,0]];
+  for(let gy=gy0;gy<gy1;gy++){
+    for(let gx=gx0;gx<gx1;gx++){
+      const self=at(gx,gy);
+      const [px,py]=w2s(gx*islandCellW,gy*islandCellH);
+      const cx=px+cellW/2, cy=py+cellH/2;
+      for(let d=0;d<4;d++){
+        const nbr=at(gx+dirVec[d][0],gy+dirVec[d][1]);
+        if(nbr===self)continue;
+        const tr=transFor(self,nbr);
+        if(!tr)continue;
+        const [tn,flip]=tr;
+        const img=transImgs[tn];
+        if(!img||!img.complete||!img.naturalWidth)continue;
+        // gecis tile: ust=A(self gibi dusun), alt=B. flip ise dikey ters.
+        // d=2(alt komsu): tile dik, ust=self alt=nbr -> rotasyon 0
+        // d=0(ust komsu): 180 derece. d=1(sag):270... ayarla
+        ctx.save();
+        ctx.translate(cx,cy);
+        // yon rotasyonu: gecis "alt" tarafi komsuya baksin
+        ctx.globalAlpha=0.95;
+        // Python simulasyonu ile ayni sira: once flip, sonra rotate
+        if(flip){ctx.scale(1,-1);}
+        const rot=[Math.PI, -Math.PI/2, 0, Math.PI/2][d];
+        ctx.rotate(rot);
+        ctx.drawImage(img,-cellW/2-1,-cellH/2-1,cellW+2,cellH+2);
+        ctx.restore();
+      }
+    }
+  }
   // ZEMİN DETAYLARI (lekeler, cakil, ot - profesyonel canlilik)
   drawGroundDetails();
+  // SU dalga parlamasi (animasyon)
+  drawIslandWater();
   // ızgara kaldırıldı (texture zemin var)
   const [bx,by]=w2s(0,0);ctx.strokeStyle='rgba(255,255,255,0.15)';ctx.lineWidth=3;ctx.strokeRect(bx,by,MAP_W*z,MAP_H*z);
   for(const tr of tracks){const[x,y]=w2s(tr.x,tr.y);ctx.save();ctx.translate(x,y);ctx.rotate(tr.a+Math.PI/2);ctx.fillStyle=`rgba(20,18,12,${tr.life*0.22})`;ctx.fillRect(-18*z,-3*z,6*z,6*z);ctx.fillRect(12*z,-3*z,6*z,6*z);ctx.restore();}
