@@ -1067,6 +1067,7 @@ function update(){
         const t01=Math.min(1,td/t.range);const acc=0.9-0.35*t01;const willHit=Math.random()<acc;
         let aimAng=t.turretAngle;if(!willHit)aimAng+=(Math.random()-0.5)*0.16;
         bullets.push({x:bx,y:by,vx:Math.cos(aimAng)*15,vy:Math.sin(aimAng)*15,team:t.team,dmg:t.dmg,life:90,willHit,kind:'50cal'});
+        muzzleFlash(bx,by,t.turretAngle,0.55); // parlak kivilcim+gaz topu (diger birimler gibi)
         t.fireCD=t.fireRate;t.recoil=5;t.flash=4;t.flashFrame=0;t.muzzle=4;
         const camCX=cam.x+VW/cam.zoom/2,camCY=cam.y+VH/cam.zoom/2;
         const sd=dist(t.x,t.y,camCX,camCY);const vol=Math.max(0,1-sd/800);
@@ -1484,6 +1485,7 @@ function drawStryker(t){
   ctx.save();ctx.globalAlpha=alpha;ctx.translate(tpx,tpy);ctx.rotate(t.turretAngle+Math.PI/2);
   if(t.team==='enemy')ctx.filter='hue-rotate(300deg) saturate(1.3)';
   // NAMLU (mg.png): taban donme noktasinda, uc ileri uzanir, geri tepme
+  let mLen=STR_MG_H*STR_MG_SCALE*z;
   if(strMgImg.complete){
     const mw=STR_MG_W*STR_MG_SCALE*z, mh=STR_MG_H*STR_MG_SCALE*z;
     ctx.drawImage(strMgImg,-mw/2,-mh*STR_MG_PIVOT+(t.recoil||0)*z,mw,mh);
@@ -1493,16 +1495,16 @@ function drawStryker(t){
     const tw=STR_TUR_W*STR_TUR_SCALE*z, th=STR_TUR_H*STR_TUR_SCALE*z;
     ctx.drawImage(strTurImg,-tw/2,-th*STR_TUR_PIVOT,tw,th);
   }
-  ctx.filter='none';ctx.restore();
-  // NAMLU ATESI (namlu ucunda)
+  // NAMLU ATESI (fire_03/04) - DEMO v13 ile birebir: namlu ucunda parlak alev
   if(t.flash>0&&strFireImgs[0]&&strFireImgs[0].complete){
-    const fr=strFireImgs[Math.min(1,t.flashFrame)];
-    const bl=STR_MG_H*STR_MG_SCALE*z*STR_MG_PIVOT;
-    const fxp=tpx+Math.cos(t.turretAngle)*bl, fyp=tpy+Math.sin(t.turretAngle)*bl;
-    ctx.save();ctx.globalCompositeOperation='lighter';ctx.translate(fxp,fyp);ctx.rotate(t.turretAngle+Math.PI/2);
-    const w=fr.width*0.5*z,h=fr.height*0.5*z;
-    ctx.drawImage(fr,-w/2,-h*0.7,w,h);ctx.restore();
+    const fr=strFireImgs[Math.min(strFireImgs.length-1,t.flashFrame)];
+    const mlen=STR_MG_H*STR_SCALE*STR_MG_SCALE*z; // demo: IMG.mg.height*SCALE*MG_SCALE
+    const fw=fr.width*STR_SCALE*0.7*z, fh=fr.height*STR_SCALE*0.7*z; // demo: width*SCALE*0.7
+    ctx.save();ctx.globalCompositeOperation='lighter';
+    ctx.drawImage(fr,-fw/2,-mlen-fh,fw,fh); // demo: -mlen-fh
+    ctx.restore();
   }
+  ctx.filter='none';ctx.restore();
   // secim + can cubugu
   if(t.selected){drawSelectBrackets(sx,sy,hw*0.55,hh*0.5);}
   ctx.fillStyle=t.team==='player'?'#5cff7a':'#ff5c5c';ctx.beginPath();ctx.arc(sx,sy-hh*0.46,3*z,0,Math.PI*2);ctx.fill();
@@ -1713,8 +1715,12 @@ function draw(){
       ctx.fillStyle='#fff8e0';ctx.beginPath();ctx.arc(x,y,3.5*z,0,Math.PI*2);ctx.fill();
     } else { // TANK & MAKİNELİ: parlayan tracer (izli mermi)
       const big=b.kind!=='mg';
-      const tl=(big?18:11)*z; const core=(big?3:2)*z;
-      const col=b.team==='player'?[180,255,140]:[255,180,90];
+      // her silaha ozgu iz: 25mm buyuk turuncu, 50cal sari, mg kucuk, tank yesil/turuncu
+      let tl, core, col;
+      if(b.kind==='50cal'){ tl=26*z; core=2.6*z; col=[255,235,90]; }       // Stryker .50cal: parlak SARI
+      else if(b.kind==='25mm'){ tl=30*z; core=3.4*z; col=[255,150,40]; }   // Bradley 25mm: buyuk TURUNCU
+      else if(big){ tl=18*z; core=3*z; col=b.team==='player'?[180,255,140]:[255,180,90]; } // tank
+      else { tl=11*z; core=2*z; col=b.team==='player'?[170,255,150]:[255,170,80]; }       // makineli (mg)
       // ışıklı iz (tracer)
       const g=ctx.createLinearGradient(x,y,x-ux*tl,y-uy*tl);
       g.addColorStop(0,`rgba(${col[0]},${col[1]},${col[2]},0.85)`);g.addColorStop(1,`rgba(${col[0]},${col[1]},${col[2]},0)`);
