@@ -397,41 +397,50 @@ window.addEventListener('load',()=>{
 });
 
 // === KIŞLA (üretim binası) ===
-const factory={x:700,y:900, w:FAC_W*FAC_SCALE, h:FAC_H*FAC_SCALE, buildQueue:[], buildTimer:0, selected:false, rallyX:700, rallyY:1300};
-const enemyFactory={x:MAP_W-700,y:MAP_H-900,w:FAC_W*FAC_SCALE,h:FAC_H*FAC_SCALE,spawnTimer:0,resources:200};
+const factory={x:1050,y:1050, w:FAC_W*FAC_SCALE, h:FAC_H*FAC_SCALE, buildQueue:[], buildTimer:0, selected:false, rallyX:1300, rallyY:1300};
+const enemyFactory={x:6050,y:4350,w:FAC_W*FAC_SCALE,h:FAC_H*FAC_SCALE,spawnTimer:0,resources:200};
 
-// === ENGELLER (kaya/su/agac) ===
-// kaya: mermi+birim engeli (siper). su: kara giremez, heli/CH47 gecer. agac: yavaslatir+birim engeli
+// === ADA HARİTASI (Big Island düzeni - gercek harita verisi) ===
+// 0=su(gecilemez), 1=cimen(kara), 2=kum(kara), 3=dag(engel)
+const ISLAND_GW=90, ISLAND_GH=60;
+const ISLAND_DATA="000000000000000000000000000000000000000000000000000000000002222200000000000000000000000000000000000000000000000000000000000000000000000000000000000211111110000000000000000000000000000000000000000000000000000000000000000000000000000000000211111211112000000000000000000000000000000022211111112000000000000000000000022222220000000021112322111200000000000000000000000000002111111111111200000000000000002211111111111112000002111233111200000000000000000000000000021111111332111200000000000000211111111111111112000000211233111200000000000000000000000000211111111233111200000000000221111111111111111111000000011111111200000000000000000000000000211111111111111200000000002111111111111111111111000000021111111200000000000000000000000000211111111111111200000000021111111111111102221111000000000021122000000000000000000000000002111111111111111200000000211111111111111112221111000000000001100000000000000000000000000001111111111111111122000002111111111123311111022011200002222111112000000000000000000000000001111111111111111111122001111111111233311111110201111111111111111200000000000000000000111111111111111111111111111111111111111233211111111111111111111111111120000000000000000000111111111111111111111111111111111111111122111112221111111111111111111112000000000000000000000021111111111111111111111111111111111111111110002111111111232211111111200000000000000000000211111111111122000021111111111111111111111120002111111111333321111111112000000000000000000211111111111120000000111111111111111111111100001111111111333332111111111200000000000000000211111111111200000002111111111111111111111100001111111111233333321111111120000000000000000211111111111200000001111111111222211111111200001111111111133333332111111112000000000000000211111111111200000021111111111111111111112000021111111221112233333311111111200000000000000011111111111200000211111111111333332111112000021111122333111112333311111111120000000000000011111111111000000111111111111333221111120000221111223333211111133311111111120000000000000002111111110000002111111111111111111111200002111112333333332211111111111111120000000000000000022222000000000111111111111111111220000001111111233333212211111111111111120000000000000000000000000000000000002111111112200000000021111111133211111110222011111111120000000000000000000000000000000000000001110000000000000211112331111111111111022220111111120000000000000000000000000000000000000001110000000000021111113221111111111111111111111111120000000000000000000000000000000000000001110000000002111111222111111211222222222221111111200000000000000000000000000002221111111001111112221111111121221112200011000000000000000000000000000000000000000000000011111111111111111111111111123111111220000011000000000000000000000000000000000000000000000211111111111111111111111111321111110000000011000000000000000000000000000000000000000000000211111111111111111111223123211111220000000211211111220000000000000000000000000000000000000211111111111111111111111121111112000000211111111111111112000000000000000000000000000000000111111111111111111111111111111200000002111111111111111111100000000000000000000000000000000111111123333311111111111111110000000221111111111111111111120000000000000000000000000000000111111133333311111111111111120000001111112233323333211111120000000000000000000000000000000111111333333311111111111111100000221111233333333333211111100000000000000000000000000000000111111233333311111111111111200002111111233333332111111111200000000000000000000000000000000111111233333311111111111112000021111112333333321111111120000000022111112000000000000000000111111233333311111111111120002111111113332222111111112000000000211111111100000000000000000111111111111111111111111100021111111111111111111111112000000021111111111100000000000000000111111111111111111111111111111111111111111111111111110000000011111111111100000000000000000111111111111111111111111111111111111111111111111111112000000011111101111100000000000000000111111111111111111111111111111111111111111111111111111000000211112222211100000000000000000211111111111111111111111111111111111111111111111111111120002111110022211200000000000000000011111111111111111111111111111111111111111111111111111111221111111110011200000000000000000021111111111111111111111111111111111111111111111111111111111111111111112000000000000000000000221112222000000011111111111111111111111111111111110222001111111111110000000000000000000000001110000000000011111111111111111111111111211102111222211111111111112000000000000000000000211111120000000011111111111111100001111220011100211100011111111111112000000000000000000000211111111200000211111111111110220011111000011100211111111111111111120000000000000000000000111111111120000111111111111111111111112000011100111111111111333211120000000000000000000000111211111112000111111111111111111111120000011100211111111112333111120000000000000000000000211232111111200111111111111111111111200000011100211111111113332111200000000000000000000000021123111111100002222111111122200000000000011100211111111223331110000000000000000000000000001111111111100000000000000000000000000000011100211111112333321110000000000000000000000000002111111111100000000000000000000000000000011100021111112222111120000000000000000000000000000222222222200000000000000000000000000000011100002211111111111200000000000000000000000000000000000000000000000000000000000000000000011100000000000000000000000000000000000000000000000000000000000000000000000000000000000000011100000000000000000000000000";
+const islandCellW=MAP_W/ISLAND_GW, islandCellH=MAP_H/ISLAND_GH;
+function islandAt(wx,wy){
+  // dunya koordinatindan terrain tipi (0=su,1=cimen,2=kum,3=dag)
+  let gx=Math.floor(wx/islandCellW), gy=Math.floor(wy/islandCellH);
+  if(gx<0||gx>=ISLAND_GW||gy<0||gy>=ISLAND_GH)return 0; // disari = su
+  return +ISLAND_DATA[gy*ISLAND_GW+gx];
+}
+function isWater(wx,wy){return islandAt(wx,wy)===0;}
+function isLand(wx,wy){const t=islandAt(wx,wy);return t===1||t===2;}
+
+// === ENGELLER (kaya/agac) - ada uzerinde, su grid'den ayri ===
 let obstacles=[];
 function genObstacles(){
   obstacles=[];
-  const rockImgs=['rock1','rock2','rock3'], treeImgs=['tree1','tree2'], waterImgs=['water1'];
+  const rockImgs=['rock1','rock2','rock3'], treeImgs=['tree1','tree2'];
   const safe=(x,y)=>{
-    if(Math.hypot(x-factory.x,y-factory.y)<1200)return false;
-    if(Math.hypot(x-enemyFactory.x,y-enemyFactory.y)<1200)return false;
+    if(Math.hypot(x-factory.x,y-factory.y)<1000)return false;
+    if(Math.hypot(x-enemyFactory.x,y-enemyFactory.y)<1000)return false;
     return true;
   };
-  const counts={rock:16, water:5, tree:13};
-  for(const type of ['rock','water','tree']){
-    let placed=0, tries=0;
-    while(placed<counts[type] && tries<400){
-      tries++;
-      const x=300+Math.random()*(MAP_W-600);
-      const y=300+Math.random()*(MAP_H-600);
-      if(!safe(x,y))continue;
-      let r, img;
-      if(type==='water'){r=240+Math.random()*200; img=waterImgs[0];}
-      else if(type==='rock'){r=80+Math.random()*70; img=rockImgs[Math.floor(Math.random()*rockImgs.length)];}
-      else {r=85+Math.random()*55; img=treeImgs[Math.floor(Math.random()*treeImgs.length)];}
-      let ok=true;
-      for(const o of obstacles){if(Math.hypot(o.x-x,o.y-y)<o.r+r+40){ok=false;break;}}
-      if(!ok)continue;
-      // rastgele dondurme + boyut cesitliligi (tekrar hissini azalt)
-      const rot=Math.random()*Math.PI*2;
-      const flip=Math.random()<0.5;
-      obstacles.push({x,y,r,type,img,rot:(type==='water'?0:rot),flip,seed:Math.random()*1000});
-      placed++;
-    }
+  // DAGLARA kaya yerlestir (grid tip 3 = dag)
+  let rockPlaced=0, treePlaced=0;
+  for(let tries=0; tries<800 && (rockPlaced<20||treePlaced<16); tries++){
+    const x=400+Math.random()*(MAP_W-800);
+    const y=400+Math.random()*(MAP_H-800);
+    if(!safe(x,y))continue;
+    const terr=islandAt(x,y);
+    let type,r,img;
+    if(terr===3 && rockPlaced<20){ // dag -> kaya
+      type='rock'; r=80+Math.random()*70; img=rockImgs[Math.floor(Math.random()*rockImgs.length)]; rockPlaced++;
+    } else if((terr===1) && treePlaced<16 && Math.random()<0.4){ // cimen -> agac
+      type='tree'; r=85+Math.random()*55; img=treeImgs[Math.floor(Math.random()*treeImgs.length)]; treePlaced++;
+    } else continue;
+    let ok=true;
+    for(const o of obstacles){if(Math.hypot(o.x-x,o.y-y)<o.r+r+30){ok=false;break;}}
+    if(!ok)continue;
+    obstacles.push({x,y,r,type,img,rot:Math.random()*Math.PI*2,flip:Math.random()<0.5,seed:Math.random()*1000});
   }
 }
 // === ZEMİN DETAYLARI (profesyonel his: lekeler, cakil, ot tutamlari) ===
@@ -529,11 +538,11 @@ function setup(){
   factory.buildQueue=[];factory.buildTimer=0;
   genObstacles();
   genGroundDetails();
-  for(let i=0;i<3;i++)tanks.push(makeTank(800+(i%2)*80,1100+Math.floor(i/2)*100,'player'));
+  for(let i=0;i<3;i++)tanks.push(makeTank(factory.x+200+(i%2)*80,factory.y+200+Math.floor(i/2)*100,'player'));
   spawnEnemyWave(2);
-  cam.x=300;cam.y=600;clampCam();
+  cam.x=factory.x-VW/cam.zoom/2;cam.y=factory.y-VH/cam.zoom/2;clampCam();
 }
-function spawnEnemyWave(n){waveNum++;for(let i=0;i<n;i++){const ex=MAP_W-600-Math.random()*300,ey=MAP_H-1200-Math.random()*600;tanks.push(makeTank(ex,ey,'enemy'));}flashStatus(`⚔️ Düşman dalgası ${waveNum}! (${n} tank)`);}
+function spawnEnemyWave(n){waveNum++;for(let i=0;i<n;i++){const ex=enemyFactory.x-200-Math.random()*300,ey=enemyFactory.y-200-Math.random()*300;tanks.push(makeTank(ex,ey,'enemy'));}flashStatus(`⚔️ Düşman dalgası ${waveNum}! (${n} tank)`);}
 
 let statusFlash='',statusFlashT=0;
 function flashStatus(m){statusFlash=m;statusFlashT=180;}
@@ -1130,15 +1139,27 @@ function update(){
       }
     }
   }
-  // ENGEL çarpışması (kaya/su/agac) - sadece KARA birimleri (heli/CH47 ucar, gecer)
+  // ENGEL çarpışması (kaya/agac) + SU sınırı - sadece KARA birimleri (heli/CH47 ucar, gecer)
   for(const t of tanks){
     if(!t.alive)continue;
-    if(t.unitType==='heli'||t.unitType==='chinook')continue; // hava birimleri engelleri asar
+    if(t.unitType==='heli'||t.unitType==='chinook')continue; // hava birimleri her seyi asar
+    // SU: kara birimi suya girerse en yakin karaya geri it
+    if(isWater(t.x,t.y)){
+      // 8 yonde en yakin karayi ara
+      let bestX=t.x,bestY=t.y,found=false,bd=1e9;
+      for(let a=0;a<16;a++){
+        const ang=a/16*Math.PI*2;
+        for(let dd=40;dd<=400;dd+=40){
+          const cx=t.x+Math.cos(ang)*dd, cy=t.y+Math.sin(ang)*dd;
+          if(isLand(cx,cy)&&dd<bd){bd=dd;bestX=cx;bestY=cy;found=true;break;}
+        }
+      }
+      if(found){const ang=Math.atan2(bestY-t.y,bestX-t.x);t.x+=Math.cos(ang)*6;t.y+=Math.sin(ang)*6;}
+    }
     for(const o of obstacles){
       const minD=o.r+STATS.radius;
       const dx=t.x-o.x, dy=t.y-o.y, d=Math.hypot(dx,dy);
       if(d<minD && d>0.1){
-        // disari it
         const push=(minD-d), nx=dx/d, ny=dy/d;
         t.x+=nx*push; t.y+=ny*push;
       }
@@ -1582,6 +1603,46 @@ function drawGroundDetails(){
     ctx.restore();
   }
 }
+function drawIslandWater(){
+  const z=cam.zoom;
+  // gorunur hucre araligini hesapla (performans)
+  const x0=Math.max(0,Math.floor(cam.x/islandCellW)-1);
+  const y0=Math.max(0,Math.floor(cam.y/islandCellH)-1);
+  const x1=Math.min(ISLAND_GW,Math.ceil((cam.x+VW/z)/islandCellW)+1);
+  const y1=Math.min(ISLAND_GH,Math.ceil((cam.y+VH/z)/islandCellH)+1);
+  // su hucrelerini ciz
+  for(let gy=y0;gy<y1;gy++){
+    for(let gx=x0;gx<x1;gx++){
+      if(+ISLAND_DATA[gy*ISLAND_GW+gx]!==0)continue; // su degil
+      const wx=gx*islandCellW, wy=gy*islandCellH;
+      const [sx,sy]=w2s(wx,wy);
+      const cw=islandCellW*z+1, ch=islandCellH*z+1;
+      // derinlik: cevredeki su sayisina gore (kenar daha acik)
+      ctx.fillStyle='#1d3a4a';
+      ctx.fillRect(sx,sy,cw,ch);
+    }
+  }
+  // KIYI çizgisi + dalga (su-kara siniri)
+  ctx.strokeStyle='rgba(130,180,190,0.25)';ctx.lineWidth=2*z;
+  for(let gy=y0;gy<y1;gy++){
+    for(let gx=x0;gx<x1;gx++){
+      if(+ISLAND_DATA[gy*ISLAND_GW+gx]!==0)continue;
+      const wx=gx*islandCellW, wy=gy*islandCellH;
+      const [sx,sy]=w2s(wx,wy);
+      const cw=islandCellW*z, ch=islandCellH*z;
+      // komsu kara mi? kenar ciz
+      const land=(ddx,ddy)=>{const nx=gx+ddx,ny=gy+ddy;if(nx<0||nx>=ISLAND_GW||ny<0||ny>=ISLAND_GH)return false;return +ISLAND_DATA[ny*ISLAND_GW+nx]!==0?false:true;};
+      // aslinda komsu KARA ise kiyi
+      const isLandN=(ddx,ddy)=>{const nx=gx+ddx,ny=gy+ddy;if(nx<0||nx>=ISLAND_GW||ny<0||ny>=ISLAND_GH)return false;return +ISLAND_DATA[ny*ISLAND_GW+nx]!==0;};
+      ctx.beginPath();
+      if(isLandN(0,-1)){ctx.moveTo(sx,sy);ctx.lineTo(sx+cw,sy);}
+      if(isLandN(0,1)){ctx.moveTo(sx,sy+ch);ctx.lineTo(sx+cw,sy+ch);}
+      if(isLandN(-1,0)){ctx.moveTo(sx,sy);ctx.lineTo(sx,sy+ch);}
+      if(isLandN(1,0)){ctx.moveTo(sx+cw,sy);ctx.lineTo(sx+cw,sy+ch);}
+      ctx.stroke();
+    }
+  }
+}
 function drawObstacles(){
   const z=cam.zoom;
   for(const o of obstacles){
@@ -1657,6 +1718,8 @@ function draw(){
     }
     ctx.restore();
   } else { ctx.fillStyle='#3a3228';ctx.fillRect(0,0,VW,VH); }
+  // ADA SUYU (gecilemez mavi bolgeler)
+  drawIslandWater();
   // ZEMİN DETAYLARI (lekeler, cakil, ot - profesyonel canlilik)
   drawGroundDetails();
   // ızgara kaldırıldı (texture zemin var)
@@ -1761,15 +1824,23 @@ function drawMinimap(){
   minimapRect={mx,my,mw,mh}; // tiklama icin sakla
   // arka plan
   ctx.fillStyle='rgba(20,28,18,0.8)';ctx.fillRect(mx-3,my-3,mw+6,mh+6);
-  ctx.fillStyle='rgba(90,105,70,0.9)';ctx.fillRect(mx,my,mw,mh);
+  // ADA terrain (su mavi, kara yesil, kum, dag)
+  const cw=mw/ISLAND_GW, ch=mh/ISLAND_GH;
+  for(let gy=0;gy<ISLAND_GH;gy++){
+    for(let gx=0;gx<ISLAND_GW;gx++){
+      const t=+ISLAND_DATA[gy*ISLAND_GW+gx];
+      ctx.fillStyle=t===0?'#1d3a4a':t===2?'#9a8862':t===3?'#6b6358':'#5a7048';
+      ctx.fillRect(mx+gx*cw,my+gy*ch,cw+0.5,ch+0.5);
+    }
+  }
   const sx=mw/MAP_W, sy=mh/MAP_H;
   // kışlalar
   ctx.fillStyle='#5cff7a';ctx.fillRect(mx+factory.x*sx-3,my+factory.y*sy-3,6,6);
   ctx.fillStyle='#ff5c5c';ctx.fillRect(mx+enemyFactory.x*sx-3,my+enemyFactory.y*sy-3,6,6);
   // engeller (minimap)
   for(const o of obstacles){
-    ctx.fillStyle=o.type==='water'?'rgba(40,90,120,0.8)':o.type==='rock'?'rgba(120,115,105,0.8)':'rgba(50,110,50,0.8)';
-    const rr=Math.max(1.5,o.r*sx);
+    ctx.fillStyle=o.type==='rock'?'rgba(120,115,105,0.8)':'rgba(50,110,50,0.8)';
+    const rr=Math.max(1,o.r*sx);
     ctx.beginPath();ctx.arc(mx+o.x*sx,my+o.y*sy,rr,0,Math.PI*2);ctx.fill();
   }
   // birimler
