@@ -1808,39 +1808,34 @@ function draw(){
       }
     }
   }
-  // 2) AUTO-TILE GEÇİŞLER: dusuk oncelikli terrain, yuksek oncelikli komsuya tasiyor
-  // oncelik: su(0)<cimen(1)<kum(2)<tas(3). Her hucre, kendinden DUSUK oncelikli
-  // komsularina dogru kendi gecisini cizer (kenar+kose).
+  // 2) AUTO-TILE GEÇİŞLER: her hucre, kendinden YUKSEK oncelikli komsuya dogru
+  // gecis kenari cizer. Edge tile formati: ust=A(dusuk/self), alt=B(yuksek/komsu).
+  // oncelik: su(0)<cimen(1)<kum(2)<tas(3).
   const at=(gx,gy)=>{if(gx<0||gx>=ISLAND_GW||gy<0||gy>=ISLAND_GH)return 0;return +ISLAND_DATA[gy*ISLAND_GW+gx];};
-  const prio={0:0,1:1,2:2,3:3};
-  // 4 kenar yonu: ust,sag,alt,sol + rotasyon (edge tile ust=dusuk alt=yuksek olacak sekilde)
+  const prio={1:1,2:2,0:3,3:4}; // edge formatina gore: cimen<kum<su<tas (alt=yuksek)
+  // edge tile: ust=self(dusuk), alt=komsu(yuksek). Komsu yonune gore dondur:
+  // komsu ALTTA(d=alt) ise rotasyon 0. komsu ustte=180, sag=90, sol=-90.
   const edgeDirs=[
-    {dx:0,dy:-1,rot:0},      // ust komsu: edge dik (ust=self... ) -> ayarlanacak
-    {dx:1,dy:0,rot:Math.PI/2},
-    {dx:0,dy:1,rot:Math.PI},
-    {dx:-1,dy:0,rot:-Math.PI/2},
+    {dx:0,dy:1,rot:0},        // komsu ALT -> tile dik (alt=komsu) rot 0
+    {dx:-1,dy:0,rot:Math.PI/2},   // komsu SOL
+    {dx:0,dy:-1,rot:Math.PI}, // komsu UST
+    {dx:1,dy:0,rot:-Math.PI/2},   // komsu SAG
   ];
   for(let gy=gy0;gy<gy1;gy++){
     for(let gx=gx0;gx<gx1;gx++){
       const self=at(gx,gy);
       const [px,py]=w2s(gx*islandCellW,gy*islandCellH);
       const cx=px+cellW/2, cy=py+cellH/2;
-      // KENARLAR: komsu daha YUKSEK oncelikliyse, o komsu kendi gecisini buraya cizecek;
-      // ama biz "self yuksekse komsuya tasi" yaklasimi kullanalim:
-      // self, kendinden dusuk oncelikli her komsuya gecis cizer.
       for(let d=0;d<4;d++){
         const nx=gx+edgeDirs[d].dx, ny=gy+edgeDirs[d].dy;
         const nbr=at(nx,ny);
-        if(prio[nbr]>=prio[self])continue; // sadece dusuk komsuya tasi
+        if(prio[nbr]<=prio[self])continue; // sadece YUKSEK oncelikli komsuya ciz
         const pair=transPair(self,nbr);
         if(!pair)continue;
         const img=transImgs[pair+'_edge'];
         if(!img||!img.complete||!img.naturalWidth)continue;
-        // edge tile: ust=YUKSEK(self), alt=DUSUK(nbr) varsayalim. 
-        // komsu yonune gore dondur: alt taraf komsuya baksin
         ctx.save();ctx.translate(cx,cy);
-        const rot=[0,-Math.PI/2,Math.PI,Math.PI/2][d]; // ust,sag,alt,sol
-        ctx.rotate(rot);
+        ctx.rotate(edgeDirs[d].rot);
         ctx.drawImage(img,-cellW/2-1,-cellH/2-1,cellW+2,cellH+2);
         ctx.restore();
       }
