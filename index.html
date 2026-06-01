@@ -326,7 +326,7 @@ const SCALE=0.075;
 const GROUND_TILE=512;const GROUND_SCALE=0.28;
 const FAC_SCALE=0.16;   // kışla ölçeği küçültüldü
 const MAP_W=3600,MAP_H=3600;
-const cam={x:0,y:0,zoom:0.50}; // bakış açısı 0.50
+const cam={x:0,y:0,zoom:0.85}; // bakış açısı 0.85
 function clampCam(){cam.x=Math.max(0,Math.min(MAP_W-VW/cam.zoom,cam.x));cam.y=Math.max(0,Math.min(MAP_H-VH/cam.zoom,cam.y));}
 function w2s(wx,wy){return [(wx-cam.x)*cam.zoom,(wy-cam.y)*cam.zoom];}
 function s2w(sx,sy){return [sx/cam.zoom+cam.x,sy/cam.zoom+cam.y];}
