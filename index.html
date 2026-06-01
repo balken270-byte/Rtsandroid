@@ -467,7 +467,7 @@ function buildFlowField(tx, ty) {
   const tgy = Math.floor(ty / (D_TW * FF_RES));
   const key = `${tgx}_${tgy}`;
   const cached = _ffCache.get(key);
-  if (cached && (time - cached.ts) < 300) return cached.field; // 5sn geçerliliği
+  if (cached && (time - cached.ts) < 60) return cached.field; // 1sn geçerliliği
 
   const field = new Int8Array(FF_W * FF_H).fill(-1); // -1=ziyaret edilmedi
   // Direction encoding: 0-7 = 8 yön (E,NE,N,NW,W,SW,S,SE), -1=hedef
@@ -541,8 +541,8 @@ function getNavDir(unit, targetX, targetY) {
   const dd = Math.hypot(dx, dy);
   if (dd < 5) return { x: 0, y: 0 };
 
-  // Düz çizgi kara üzerindeyse flow field'a gerek yok
-  const steps = Math.min(8, Math.ceil(dd / (D_TW * 2)));
+  // Düz çizgi kara üzerindeyse flow field'a gerek yok - daha sık kontrol et
+  const steps = Math.min(20, Math.ceil(dd / D_TW) + 1);
   let blocked = false;
   for (let i = 1; i <= steps; i++) {
     const px = wx + (dx / dd) * (dd * i / steps);
@@ -551,7 +551,6 @@ function getNavDir(unit, targetX, targetY) {
   }
 
   if (!blocked) {
-    // Serbest yol: düz git ama su sürüklenmesine karşı hafif kaçınma ekle
     return { x: dx / dd, y: dy / dd };
   }
 
@@ -566,9 +565,8 @@ function getNavDir(unit, targetX, targetY) {
   if (dir < 0) return { x: dx / dd, y: dy / dd }; // hedef hücresindeyiz
   const dirs = [[1,0],[1,-1],[0,-1],[-1,-1],[-1,0],[-1,1],[0,1],[1,1]];
   const [fdx, fdy] = dirs[dir];
-  // Flow field yönü + hedef yönü harmanla
-  // DÜZELTME: yakınken flow field ağır (su kenarından kaçmak için), uzakta düz git
-  const blendFactor = Math.max(0, 1 - dd / (D_TW * 8));
+  // Uzakta flow field ağır (engel etrafı dolaş), yakında hedef yönü ağır (titreme yok)
+  const blendFactor = Math.min(1, dd / (D_TW * 6));
   const bx = fdx * blendFactor + (dx / dd) * (1 - blendFactor);
   const by = fdy * blendFactor + (dy / dd) * (1 - blendFactor);
   const blen = Math.hypot(bx, by) || 1;
@@ -1213,9 +1211,22 @@ function update(){
           ax+=(odx/od)*force; ay+=(ody/od)*force;
         }
       }
+      // === BİRİM AYIRMA (Separation Steering) - takılmayı önler ===
+      // Yakındaki birimleri erken fark et, çarpışmadan önce dağıl
+      const sepRadius = STATS.radius * (t.unitType==='soldier'?2.2:3.2);
+      for(const other of tanks){
+        if(other===t||!other.alive)continue;
+        if(other.unitType==='heli'||other.unitType==='chinook')continue;
+        const odx=t.x-other.x, ody=t.y-other.y, od=Math.hypot(odx,ody);
+        if(od<sepRadius && od>0.1){
+          // Yakınlık arttıkça kuvvet artar (karesel)
+          const force=Math.pow((sepRadius-od)/sepRadius,2)*0.7;
+          ax+=(odx/od)*force; ay+=(ody/od)*force;
+        }
+      }
       if(ax!==0||ay!==0){
         const am=Math.hypot(ax,ay)||1;
-        navDx+=ax/am*0.5; navDy+=ay/am*0.5;
+        navDx+=ax/am*0.6; navDy+=ay/am*0.6;
         const nm=Math.hypot(navDx,navDy)||1;
         navDx/=nm; navDy/=nm;
       }
@@ -1499,7 +1510,12 @@ function update(){
       t.x=px; t.y=py;
       const tryMove=(ang,spd)=>{const nx=t.x+Math.cos(ang)*spd, ny=t.y+Math.sin(ang)*spd; if(!isWater(nx,ny)){t.x=nx;t.y=ny;return true;} return false;};
       const mvAng=Math.atan2(mvy,mvx), mvLen=Math.hypot(mvx,mvy)||1;
-      if(!tryMove(mvAng+0.6,mvLen)&&!tryMove(mvAng-0.6,mvLen)&&!tryMove(mvAng+1.2,mvLen)&&!tryMove(mvAng-1.2,mvLen)){}
+      // Daha fazla açı dene - kıyıya yapışmayı önle
+      let slid=false;
+      for(let step=0.3;step<=Math.PI&&!slid;step+=0.3){
+        if(tryMove(mvAng+step,mvLen)){slid=true;}
+        else if(tryMove(mvAng-step,mvLen)){slid=true;}
+      }
     }
     // Engel çarpışması (obstacle listesi boşsa etkisiz)
     for(const o of obstacles){
