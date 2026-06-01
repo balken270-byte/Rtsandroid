@@ -323,10 +323,10 @@ function playStrFire(vol){
   src.stop(audioCtx.currentTime+0.18); // tek atis icin kisa kes
 }
 const SCALE=0.075;
-const GROUND_TILE=512;const GROUND_SCALE=0.28; // zemin tile boyutu ve ölçek - yeni haritaya göre küçültüldü
-const FAC_SCALE=0.26;   // kışla ölçeği - yeni haritaya göre küçültüldü
+const GROUND_TILE=512;const GROUND_SCALE=0.28;
+const FAC_SCALE=0.16;   // kışla ölçeği küçültüldü
 const MAP_W=3600,MAP_H=3600;
-const cam={x:0,y:0,zoom:0.72}; // yeni haritaya göre bakış açısı ayarlandı
+const cam={x:0,y:0,zoom:0.50}; // bakış açısı 0.50
 function clampCam(){cam.x=Math.max(0,Math.min(MAP_W-VW/cam.zoom,cam.x));cam.y=Math.max(0,Math.min(MAP_H-VH/cam.zoom,cam.y));}
 function w2s(wx,wy){return [(wx-cam.x)*cam.zoom,(wy-cam.y)*cam.zoom];}
 function s2w(sx,sy){return [sx/cam.zoom+cam.x,sy/cam.zoom+cam.y];}
@@ -424,7 +424,7 @@ window.addEventListener('load',()=>{
 });
 
 // === KIŞLA (üretim binası) ===
-const factory={x:520,y:200, w:FAC_W*FAC_SCALE, h:FAC_H*FAC_SCALE, buildQueue:[], buildTimer:0, selected:false, rallyX:700, rallyY:400};
+const factory={x:520,y:420, w:FAC_W*FAC_SCALE, h:FAC_H*FAC_SCALE, buildQueue:[], buildTimer:0, selected:false, rallyX:700, rallyY:620};
 const enemyFactory={x:3180,y:3400,w:FAC_W*FAC_SCALE,h:FAC_H*FAC_SCALE,spawnTimer:0,resources:200};
 
 // === YENİ KARO HARİTASI (Big Island - 180x180, 40 karo türü) ===
@@ -449,31 +449,7 @@ const islandCellW=D_TW, islandCellH=D_TW;
 // === ENGELLER (kaya/agac) - ada uzerinde, su grid'den ayri ===
 let obstacles=[];
 function genObstacles(){
-  obstacles=[];
-  const rockImgs=['rock1','rock2','rock3'], treeImgs=['tree1','tree2'];
-  const safe=(x,y)=>{
-    if(Math.hypot(x-factory.x,y-factory.y)<1000)return false;
-    if(Math.hypot(x-enemyFactory.x,y-enemyFactory.y)<1000)return false;
-    return true;
-  };
-  // DAGLARA kaya yerlestir (grid tip 3 = dag)
-  let rockPlaced=0, treePlaced=0;
-  for(let tries=0; tries<800 && (rockPlaced<20||treePlaced<16); tries++){
-    const x=400+Math.random()*(MAP_W-800);
-    const y=400+Math.random()*(MAP_H-800);
-    if(!safe(x,y))continue;
-    const terr=islandAt(x,y);
-    let type,r,img;
-    if(terr===1 && rockPlaced<20 && Math.random()<0.3){ // kara -> kaya
-      type='rock'; r=80+Math.random()*70; img=rockImgs[Math.floor(Math.random()*rockImgs.length)]; rockPlaced++;
-    } else if((terr===1) && treePlaced<16 && Math.random()<0.4){ // kara -> agac
-      type='tree'; r=85+Math.random()*55; img=treeImgs[Math.floor(Math.random()*treeImgs.length)]; treePlaced++;
-    } else continue;
-    let ok=true;
-    for(const o of obstacles){if(Math.hypot(o.x-x,o.y-y)<o.r+r+30){ok=false;break;}}
-    if(!ok)continue;
-    obstacles.push({x,y,r,type,img,rot:Math.random()*Math.PI*2,flip:Math.random()<0.5,seed:Math.random()*1000});
-  }
+  obstacles=[]; // engeller kaldırıldı
 }
 // === ZEMİN DETAYLARI (profesyonel his: lekeler, cakil, ot tutamlari) ===
 // Dunya koordinatinda sabit, kamerayla kayar. Tekrar hissini kirar, canlilik verir.
@@ -970,7 +946,7 @@ function update(){
         }
       }
     }
-    // ENGEL KAÇINMA (kara birimleri): yoldaki engele yaklasinca hedefi yana kaydir
+    // ENGEL KAÇINMA (obstacle listesi boşsa etkisiz)
     let gx=t.tx, gy=t.ty;
     if(t.unitType!=='heli'&&t.unitType!=='chinook'&&t.hasOrder){
       let ax=0,ay=0;
@@ -982,7 +958,6 @@ function update(){
           ax+=(odx/od)*force; ay+=(ody/od)*force;
         }
       }
-      // kacinma vektorunu GECICI hedefe ekle (gercek tx/ty bozulmaz)
       gx=t.tx+ax*120; gy=t.ty+ay*120;
     }
     const dx=gx-t.x,dy=gy-t.y,dd=Math.hypot(dx,dy);
@@ -1254,21 +1229,17 @@ function update(){
   // ENGEL çarpışması (kaya/agac) + SU sınırı - sadece KARA birimleri (heli/CH47 ucar, gecer)
   for(const t of tanks){
     if(!t.alive)continue;
-    if(t.unitType==='heli'||t.unitType==='chinook')continue; // hava birimleri her seyi asar
-    // SU: kara birimi suya girdiyse onceki (kara) konuma don, sahil boyunca kaymayi dene
+    if(t.unitType==='heli'||t.unitType==='chinook')continue;
+    // Su engeli: kara birimi suya girdiyse geri al, kıyı boyunca kaydır
     if(isWater(t.x,t.y)){
       const px=(t._px!==undefined?t._px:t.x), py=(t._py!==undefined?t._py:t.y);
-      // hedefe dogru hareket vektoru
       const mvx=t.x-px, mvy=t.y-py;
-      t.x=px; t.y=py; // geri al
-      // teget yonlerde kaymayi dene (kiyi boyunca kayma)
+      t.x=px; t.y=py;
       const tryMove=(ang,spd)=>{const nx=t.x+Math.cos(ang)*spd, ny=t.y+Math.sin(ang)*spd; if(!isWater(nx,ny)){t.x=nx;t.y=ny;return true;} return false;};
       const mvAng=Math.atan2(mvy,mvx), mvLen=Math.hypot(mvx,mvy)||1;
-      // once saga 45, sola 45, sonra 90 derece kaymayi dene
-      if(!tryMove(mvAng+0.6,mvLen)&&!tryMove(mvAng-0.6,mvLen)&&!tryMove(mvAng+1.2,mvLen)&&!tryMove(mvAng-1.2,mvLen)){
-        // hicbiri olmadi: kalsin (kiyida bekler)
-      }
+      if(!tryMove(mvAng+0.6,mvLen)&&!tryMove(mvAng-0.6,mvLen)&&!tryMove(mvAng+1.2,mvLen)&&!tryMove(mvAng-1.2,mvLen)){}
     }
+    // Engel çarpışması (obstacle listesi boşsa etkisiz)
     for(const o of obstacles){
       const minD=o.r+STATS.radius;
       const dx=t.x-o.x, dy=t.y-o.y, d=Math.hypot(dx,dy);
@@ -1278,11 +1249,11 @@ function update(){
       }
     }
   }
-  // mermi kayaya carparsa durur (siper)
+  // Mermi-kaya çarpışması (obstacle listesi boşsa etkisiz)
   for(const b of bullets){
     if(b.life<=0)continue;
     for(const o of obstacles){
-      if(o.type!=='rock')continue; // sadece kaya mermiyi durdurur
+      if(o.type!=='rock')continue;
       if(Math.hypot(b.x-o.x,b.y-o.y)<o.r){b.life=0;burst(b.x,b.y,'#bbb',5,2);break;}
     }
   }
@@ -1719,25 +1690,7 @@ function drawGroundDetails(){
   }
 }
 function drawIslandWater(){
-  // PERFORMANS: su animasyonunu 3 frame'de bir çalıştır
-  if(time%3!==0)return;
-  const z=cam.zoom;
-  const x0=Math.max(0,Math.floor(cam.x/islandCellW)-1);
-  const y0=Math.max(0,Math.floor(cam.y/islandCellH)-1);
-  const x1=Math.min(ISLAND_GW,Math.ceil((cam.x+VW/z)/islandCellW)+1);
-  const y1=Math.min(ISLAND_GH,Math.ceil((cam.y+VH/z)/islandCellH)+1);
-  ctx.save();ctx.globalCompositeOperation='lighter';ctx.globalAlpha=0.035;
-  for(let gy=y0;gy<y1;gy++){
-    for(let gx=x0;gx<x1;gx++){
-      if(D_GRID[gy*ISLAND_GW+gx]!==2)continue;
-      const [sx,sy]=w2s(gx*islandCellW,gy*islandCellH);
-      const cw=islandCellW*z, ch=islandCellH*z;
-      const shimmer=Math.sin(time*0.03+gx*0.7+gy*0.5)*0.5+0.5;
-      ctx.fillStyle=`rgba(150,200,210,${shimmer})`;
-      ctx.fillRect(sx,sy,cw,ch);
-    }
-  }
-  ctx.restore();
+  // Su animasyonu kaldırıldı (performans)
 }
 function drawObstacles(){
   const z=cam.zoom;
