@@ -1211,17 +1211,25 @@ function update(){
           ax+=(odx/od)*force; ay+=(ody/od)*force;
         }
       }
-      // === BİRİM AYIRMA (Separation Steering) - takılmayı önler ===
-      // Yakındaki birimleri erken fark et, çarpışmadan önce dağıl
-      const sepRadius = STATS.radius * (t.unitType==='soldier'?2.2:3.2);
+      // === BİRİM AYIRMA (Separation Steering) - %50 azaltıldı ===
+      const sepRadius = STATS.radius * (t.unitType==='soldier'?1.1:1.6);
       for(const other of tanks){
         if(other===t||!other.alive)continue;
         if(other.unitType==='heli'||other.unitType==='chinook')continue;
         const odx=t.x-other.x, ody=t.y-other.y, od=Math.hypot(odx,ody);
         if(od<sepRadius && od>0.1){
-          // Yakınlık arttıkça kuvvet artar (karesel)
           const force=Math.pow((sepRadius-od)/sepRadius,2)*0.7;
           ax+=(odx/od)*force; ay+=(ody/od)*force;
+        }
+      }
+      // === KIYI GUVENLİ MESAFE - su kenarından uzak tut ===
+      const coastMargin = D_TW * 2.5;
+      const coastDirs = [[1,0],[-1,0],[0,1],[0,-1],[0.7,0.7],[-0.7,0.7],[0.7,-0.7],[-0.7,-0.7]];
+      for(const [cdx,cdy] of coastDirs){
+        const cx=t.x+cdx*coastMargin, cy=t.y+cdy*coastMargin;
+        if(isWater(cx,cy)){
+          const force=0.6;
+          ax-=cdx*force; ay-=cdy*force;
         }
       }
       if(ax!==0||ay!==0){
