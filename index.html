@@ -440,6 +440,145 @@ function islandAt(wx,wy){
 }
 function isWater(wx,wy){return islandAt(wx,wy)===0;}
 function isLand(wx,wy){return islandAt(wx,wy)===1;}
+
+// === FLOW FIELD NAVİGASYON SİSTEMİ ===
+// Ada haritasında su engeli etrafında dolaşmayı sağlar
+// BFS tabanlı: her hücreye "hedefe giden en iyi yön" atar
+const FF_RES = 2; // Flow field çözünürlüğü (her 2 tile'da bir nokta)
+const FF_W = Math.ceil(D.MW / FF_RES);
+const FF_H = Math.ceil(D.MH / FF_RES);
+let _ffCache = new Map(); // hedef -> {field, ts} önbellek
+
+function ffCellWalkable(gx, gy) {
+  // Kara birimi için hücre yürünebilir mi?
+  for (let dy = 0; dy < FF_RES; dy++) {
+    for (let dx = 0; dx < FF_RES; dx++) {
+      const cx = gx * FF_RES + dx, cy = gy * FF_RES + dy;
+      if (cx < 0 || cx >= D.MW || cy < 0 || cy >= D.MH) return false;
+      if (D_GRID[cy * D.MW + cx] === 2) return false;
+    }
+  }
+  return true;
+}
+
+function buildFlowField(tx, ty) {
+  // BFS ile flow field oluştur
+  const tgx = Math.floor(tx / (D_TW * FF_RES));
+  const tgy = Math.floor(ty / (D_TW * FF_RES));
+  const key = `${tgx}_${tgy}`;
+  const cached = _ffCache.get(key);
+  if (cached && (time - cached.ts) < 300) return cached.field; // 5sn geçerliliği
+
+  const field = new Int8Array(FF_W * FF_H).fill(-1); // -1=ziyaret edilmedi
+  // Direction encoding: 0-7 = 8 yön (E,NE,N,NW,W,SW,S,SE), -1=hedef
+  const dist = new Uint16Array(FF_W * FF_H).fill(65535);
+  const queue = [];
+
+  const startX = Math.min(FF_W - 1, Math.max(0, tgx));
+  const startY = Math.min(FF_H - 1, Math.max(0, tgy));
+  dist[startY * FF_W + startX] = 0;
+  field[startY * FF_W + startX] = -1;
+  queue.push(startX, startY);
+
+  const dirs = [[1,0],[1,-1],[0,-1],[-1,-1],[-1,0],[-1,1],[0,1],[1,1]];
+  let qi = 0;
+  while (qi < queue.length) {
+    const cx = queue[qi++], cy = queue[qi++];
+    const cd = dist[cy * FF_W + cx];
+    for (let d = 0; d < 8; d++) {
+      const nx = cx + dirs[d][0], ny = cy + dirs[d][1];
+      if (nx < 0 || nx >= FF_W || ny < 0 || ny >= FF_H) continue;
+      if (!ffCellWalkable(nx, ny)) continue;
+      const idx = ny * FF_W + nx;
+      const nd = cd + (dirs[d][0] !== 0 && dirs[d][1] !== 0 ? 14 : 10);
+      if (nd < dist[idx]) {
+        dist[idx] = nd;
+        field[idx] = (d + 4) % 8; // ters yön = hedefe giden yön
+        queue.push(nx, ny);
+      }
+    }
+  }
+
+  const result = { field, dist, key };
+  _ffCache.set(key, { field: result, ts: time });
+  if (_ffCache.size > 20) { // bellek limiti
+    const firstKey = _ffCache.keys().next().value;
+    _ffCache.delete(firstKey);
+  }
+  return result;
+}
+
+// Bir birim için su etrafından dolaşan yönü hesapla
+function getNavDir(unit, targetX, targetY) {
+  const wx = unit.x, wy = unit.y;
+  const dx = targetX - wx, dy = targetY - wy;
+  const dd = Math.hypot(dx, dy);
+  if (dd < 5) return { x: 0, y: 0 };
+
+  // Düz çizgi kara üzerindeyse flow field'a gerek yok
+  const steps = Math.min(8, Math.ceil(dd / (D_TW * 2)));
+  let blocked = false;
+  for (let i = 1; i <= steps; i++) {
+    const px = wx + (dx / dd) * (dd * i / steps);
+    const py = wy + (dy / dd) * (dd * i / steps);
+    if (isWater(px, py)) { blocked = true; break; }
+  }
+
+  if (!blocked) {
+    // Serbest yol: düz git ama su sürüklenmesine karşı hafif kaçınma ekle
+    return { x: dx / dd, y: dy / dd };
+  }
+
+  // Su engeli var: flow field kullan
+  const ff = buildFlowField(targetX, targetY);
+  const cgx = Math.floor(wx / (D_TW * FF_RES));
+  const cgy = Math.floor(wy / (D_TW * FF_RES));
+  if (cgx < 0 || cgx >= FF_W || cgy < 0 || cgy >= FF_H) {
+    return { x: dx / dd, y: dy / dd };
+  }
+  const dir = ff.field[cgy * FF_W + cgx];
+  if (dir < 0) return { x: dx / dd, y: dy / dd }; // hedef hücresindeyiz
+  const dirs = [[1,0],[1,-1],[0,-1],[-1,-1],[-1,0],[-1,1],[0,1],[1,1]];
+  const [fdx, fdy] = dirs[dir];
+  // Flow field yönü + hedef yönü harmanla (yakınken hedef yönü ağır)
+  const blendFactor = Math.min(1, dd / (D_TW * 6));
+  const bx = fdx * blendFactor + (dx / dd) * (1 - blendFactor);
+  const by = fdy * blendFactor + (dy / dd) * (1 - blendFactor);
+  const blen = Math.hypot(bx, by) || 1;
+  return { x: bx / blen, y: by / blen };
+}
+
+// === GELİŞMİŞ DÜŞMAN AI ===
+// Düşman birimleri için akıllıca hedef seçimi ve taktiksel hareket
+
+function getEnemyAITarget(unit, playerUnits) {
+  if (!playerUnits || playerUnits.length === 0) return null;
+  // Öncelik: savunmasız (düşük HP) veya yakın birim
+  let best = null, bestScore = Infinity;
+  for (const p of playerUnits) {
+    if (!p.alive) continue;
+    const d = Math.hypot(p.x - unit.x, p.y - unit.y);
+    const hpRatio = (p.hp || 100) / (p.maxHp || 100);
+    // Düşük HP = daha düşük skor = daha cazip hedef
+    const score = d * (0.4 + hpRatio * 0.6);
+    if (score < bestScore) { bestScore = score; best = p; }
+  }
+  return best;
+}
+
+// Flanking: düşman ile oyuncu arasına 90° açıyla konumlan
+function calcFlankPos(unit, target, flankSide) {
+  const toTarget = Math.atan2(target.y - unit.y, target.x - unit.x);
+  const flankAngle = toTarget + (flankSide ? Math.PI / 2 : -Math.PI / 2);
+  const desiredRange = (unit.range || 300) * 0.75;
+  const fx = target.x + Math.cos(flankAngle + Math.PI) * desiredRange;
+  const fy = target.y + Math.sin(flankAngle + Math.PI) * desiredRange;
+  // Su değilse flanklama pozisyonu, değilse normal saldırı
+  if (!isWater(fx, fy)) return { x: fx, y: fy };
+  const ax = target.x + Math.cos(toTarget + Math.PI) * desiredRange;
+  const ay = target.y + Math.sin(toTarget + Math.PI) * desiredRange;
+  return { x: ax, y: ay };
+}
 // Karo resimlerini yukle (base64)
 const tileImgs=D.tiles.map(src=>{const i=new Image();i.src=src;return i;});
 let tilesLoaded=0;
@@ -852,18 +991,46 @@ function update(){
   enemyFactory.waveSize=enemyFactory.waveSize||4; // ilk dalga icin minimum birim
   const reserves=tanks.filter(t=>t.alive&&t.team==='enemy'&&!t.focusTarget&&!t.hasOrder);
   if(reserves.length>=enemyFactory.waveSize){
-    // DALGA BAŞLA: hepsini TOPLU halde oyuncu ussune yolla (izgara formasyon)
-    const n=reserves.length;const cols=Math.ceil(Math.sqrt(n));const sp=STATS.radius*2.6;
-    const baseX=factory.x, baseY=factory.y+factory.h/2+100;
+    // Oyuncu birimlerini bul - onlara yonel
+    const playerUnits=tanks.filter(t=>t.alive&&t.team==='player');
+    const n=reserves.length;
+    const cols=Math.ceil(Math.sqrt(n));const sp=STATS.radius*2.8;
+    // Dalga gruplanması: tanklar önde, askerler arkada
+    const frontUnits=reserves.filter(t=>t.unitType!=='soldier'&&t.unitType!=='heli');
+    const backUnits=reserves.filter(t=>t.unitType==='soldier'||t.unitType==='heli');
+    
     reserves.forEach((t,i)=>{
-      const col=i%cols, row=Math.floor(i/cols);
-      t.tx=baseX+(col-(cols-1)/2)*sp;
-      t.ty=baseY+(row-(cols-1)/2)*sp;
-      t.homeX=t.tx;t.homeY=t.ty; // saldiri sirasinda ev = hedef
+      // Her birimi en yakın oyuncu birimine hedefle (akıllı dağılım)
+      let targetX,targetY;
+      if(playerUnits.length>0){
+        // Birim indeksine göre farklı oyuncu birimlerini hedefle (scatter)
+        const targetP=playerUnits[i % playerUnits.length];
+        // Birim etrafına dağıl (top-push formation)
+        const ang=(i/n)*Math.PI*2;
+        const spread=sp*Math.ceil(n/4)*0.4;
+        targetX=targetP.x+(i<cols?0:Math.cos(ang)*spread);
+        targetY=targetP.y+(i<cols?0:Math.sin(ang)*spread);
+      } else {
+        // Oyuncu yoksa: fabrika kareye git
+        const col=i%cols, row=Math.floor(i/cols);
+        targetX=factory.x+(col-(cols-1)/2)*sp;
+        targetY=factory.y+factory.h/2+100+(row-(cols-1)/2)*sp;
+      }
+      // Su kontrolü: kara birimi suya atanmasın
+      if(t.unitType!=='heli'&&isWater(targetX,targetY)){
+        // Fabrika önünde topla
+        const fc=i%cols, fr=Math.floor(i/cols);
+        targetX=enemyFactory.x+(fc-(cols-1)/2)*sp;
+        targetY=enemyFactory.y-enemyFactory.h/2-120+(fr-(cols-1)/2)*sp;
+      }
+      t.tx=targetX; t.ty=targetY;
+      t.homeX=targetX; t.homeY=targetY;
       t.hasOrder=true;
+      t._flankTimer=Math.floor(Math.random()*120); // desenkronize flanking
+      t._flankSide=(i%2===0);
     });
     flashStatus('⚔️ Düşman dalgası saldırıyor! ('+n+' birim)');
-    enemyFactory.waveSize=Math.min(18,enemyFactory.waveSize+2); // sonraki dalga daha buyuk
+    enemyFactory.waveSize=Math.min(18,enemyFactory.waveSize+2);
   }
   enemyFactory.resources+=0.35; // düşman kaynak geliri (combined arms için yeterli)
   enemyFactory.spawnTimer++;
@@ -912,17 +1079,41 @@ function update(){
     }
     if(t.team==='enemy'){
       if(t.hasOrder){
-        // DALGA EMRI VAR: hedefe saldir (focusTarget veya en yakin dusman)
-        if(tg){if(td>STATS.range*0.82){t.tx=tg.x;t.ty=tg.y;}else{t.tx=t.x;t.ty=t.y;}}
+        // DALGA EMRI VAR: hedefe saldir - akıllı yaklaşım
+        if(tg){
+          const attackRange=(t.range||STATS.range)*0.8;
+          if(td>attackRange){
+            // Flow field navigasyonla yaklaş
+            t.tx=tg.x; t.ty=tg.y;
+          } else {
+            // Menzildeyse dur ve ateş et (titreme yok)
+            t.tx=t.x; t.ty=t.y;
+          }
+        }
       } else {
-        // BEKLEMEDE (rally): sadece cok yakin dusman varsa savun, yoksa bekle
+        // BEKLEMEDE: savunma modu - yakın düşmana karşı flanking
         const defendRange=(t.unitType==='heli'?(t.range||420):((t.unitType==='bradley'||t.unitType==='stryker')?t.range:STATS.range))*0.9;
         const homeDist=Math.hypot(t.x-t.homeX,t.y-t.homeY);
-        if(tg && td<=defendRange && homeDist<150){
-          if(td>defendRange*0.85){t.tx=tg.x;t.ty=tg.y;}else{t.tx=t.x;t.ty=t.y;}
+        if(tg && td<=defendRange && homeDist<180){
+          if(td>defendRange*0.75){
+            // Flanking hareketi: zaman zaman yana konumlan
+            t._flankTimer=(t._flankTimer||0)+1;
+            if(t._flankTimer>120){ // 2sn'de bir flank değiştir
+              t._flankSide=!t._flankSide;
+              t._flankTimer=0;
+            }
+            if(t._flankTimer<60&&t.unitType!=='soldier'){
+              const fp=calcFlankPos(t,tg,t._flankSide);
+              t.tx=fp.x; t.ty=fp.y;
+            } else {
+              t.tx=tg.x; t.ty=tg.y;
+            }
+          } else {
+            t.tx=t.x; t.ty=t.y;
+          }
         } else {
-          // rally noktasinda bekle
-          if(homeDist>30){t.tx=t.homeX;t.ty=t.homeY;}else{t.tx=t.x;t.ty=t.y;}
+          // rally noktasında bekle
+          if(homeDist>35){t.tx=t.homeX;t.ty=t.homeY;}else{t.tx=t.x;t.ty=t.y;}
         }
       }
     }
@@ -946,9 +1137,19 @@ function update(){
         }
       }
     }
-    // ENGEL KAÇINMA (obstacle listesi boşsa etkisiz)
+    // === AKILLI NAVİGASYON: su etrafından dolaş + engel kaçınma ===
     let gx=t.tx, gy=t.ty;
-    if(t.unitType!=='heli'&&t.unitType!=='chinook'&&t.hasOrder){
+    let navDx, navDy, navDd;
+    if(t.unitType!=='heli'&&t.unitType!=='chinook'){
+      // Flow-field tabanlı navigasyon (su engeli varsa dolaş)
+      const nav=getNavDir(t,t.tx,t.ty);
+      const rawDd=Math.hypot(t.tx-t.x,t.ty-t.y);
+      if(rawDd>4){
+        navDx=nav.x; navDy=nav.y; navDd=rawDd;
+      } else {
+        navDx=t.tx-t.x; navDy=t.ty-t.y; navDd=rawDd;
+      }
+      // Obstacle kaçınma (kayalar vs)
       let ax=0,ay=0;
       for(const o of obstacles){
         const odx=t.x-o.x, ody=t.y-o.y, od=Math.hypot(odx,ody);
@@ -958,7 +1159,14 @@ function update(){
           ax+=(odx/od)*force; ay+=(ody/od)*force;
         }
       }
-      gx=t.tx+ax*120; gy=t.ty+ay*120;
+      if(ax!==0||ay!==0){
+        const am=Math.hypot(ax,ay)||1;
+        navDx+=ax/am*0.5; navDy+=ay/am*0.5;
+        const nm=Math.hypot(navDx,navDy)||1;
+        navDx/=nm; navDy/=nm;
+      }
+      // Sanal hedef noktasını nav yönünde hesapla
+      gx=t.x+navDx*navDd; gy=t.y+navDy*navDd;
     }
     const dx=gx-t.x,dy=gy-t.y,dd=Math.hypot(dx,dy);
     if(t.unitType==='chinook'){
