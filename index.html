@@ -556,20 +556,27 @@ function buildFlowField(tx, ty) {
 // Bir birim için su etrafından dolaşan yönü hesapla
 function getNavDir(unit, targetX, targetY) {
   const wx = unit.x, wy = unit.y;
+  const rawDd = Math.hypot(targetX - wx, targetY - wy);
 
-  // Lane offset: hedefe dik yönde sabit sapma → her birim farklı şerit
-  // Hedef yakınlaştıkça offset küçülür (hedefe varınca dağılmaz)
+  // RWR moveSlidingDir mantığı: birim yol boyunca dik eksende sabit ofsetle ilerler
+  // Lane offset hedefe değil, BİRİMİN pozisyonuna uygulanır
+  // Böylece tüm rota boyunca farklı şerit korunur
   let effTx = targetX, effTy = targetY;
-  if(unit.laneOx !== undefined){
-    const rawDd = Math.hypot(targetX - wx, targetY - wy);
-    const laneScale = Math.min(1, rawDd / (D_TW * 8)); // yakında offset azalır
-    // Hareket yönüne dik vektör hesapla
-    if(rawDd > 10){
-      const ndx = (targetX-wx)/rawDd, ndy = (targetY-wy)/rawDd;
-      const perpX = -ndy, perpY = ndx; // dik yön
-      effTx = targetX + perpX * unit.laneOx * laneScale + ndx * unit.laneOy * laneScale;
-      effTy = targetY + perpY * unit.laneOx * laneScale + ndy * unit.laneOy * laneScale;
-      // Offset nokta suda mı? Suda ise ofseti iptal et
+  if(unit.laneOx !== undefined && rawDd > 20){
+    const ndx = (targetX-wx)/rawDd, ndy = (targetY-wy)/rawDd;
+    const perpX = -ndy, perpY = ndx; // harekete dik yön = şerit yönü
+    // Hedefe yaklaştıkça şerit azalır (son 3 tile'da eriyip hedefe gir)
+    const fadeStart = D_TW * 3;
+    const laneScale = rawDd > fadeStart ? 1.0 : rawDd / fadeStart;
+    const lx = perpX * unit.laneOx * laneScale;
+    const ly = perpY * unit.laneOx * laneScale;
+    // Ofsetli ara nokta: birimden 4 tile ileride, şerit yönünde
+    const checkX = wx + ndx * D_TW * 4 + lx;
+    const checkY = wy + ndy * D_TW * 4 + ly;
+    if(!isWater(checkX, checkY)){
+      // Şerit geçerli: hedefi de ofsetle, tutarlı rota için
+      effTx = targetX + lx;
+      effTy = targetY + ly;
       if(isWater(effTx, effTy)){ effTx = targetX; effTy = targetY; }
     }
   }
@@ -1079,17 +1086,18 @@ function update(){
   for(const b of bullets){let best=null,bd=999;for(const t of tanks){if(t.alive&&t.team!==b.team){const d=dist(b.x,b.y,t.x,t.y);if(d<bd&&d<60){bd=d;best=t;}}}if(best)best.incomingDmg+=b.dmg;}
   // düşman kışlası tank üretir
   // DALGA HALİNDE SALDIRI: yeterli birim biriktiyse toplu saldır
-  enemyFactory.waveSize=enemyFactory.waveSize||4;
+  enemyFactory.waveSize=enemyFactory.waveSize||3; // RWR: küçük gruplarla sürekli saldırı
   const reserves=tanks.filter(t=>t.alive&&t.team==='enemy'&&!t.focusTarget&&!t.hasOrder);
 
-  // FIX: Rally'de çok uzun beklemeyi önle — 8 saniyeden uzun bekleyenler saldırıya geç
-  for(const t of tanks){
-    if(!t.alive||t.team!=='enemy'||t.hasOrder||t.focusTarget)continue;
+  // RWR skirmish AI: birimler rally'de BEKLER, yeterli birikince saldırır
+  // Phase 1: TOPLANMA — spawn sonrası rally'de bekle, etraftan savunma yap
+  // Phase 2: SALDIRI — waveSize kadar birim birikince toplu git
+  // (waveSize kontrolü aşağıdaki if(reserves.length>=waveSize) bloğunda)
+  const rallyUnits = tanks.filter(t=>t.alive&&t.team==='enemy'&&!t.hasOrder&&!t.focusTarget);
+  for(const t of rallyUnits){
     t._rallyTimer=(t._rallyTimer||0)+1;
-    if(t._rallyTimer>480){ // 8sn (60fps*8)
-      t.hasOrder=true;
-      t._rallyTimer=0;
-    }
+    // Maksimum bekleme: 20 saniye (sonra tek başına bile gider)
+    if(t._rallyTimer > 1200){ t.hasOrder=true; t._rallyTimer=0; }
   }
 
   if(reserves.length>=enemyFactory.waveSize){
@@ -1155,7 +1163,7 @@ function update(){
       t._flankSide=(i%2===0);
     });
     flashStatus('⚔️ Düşman dalgası saldırıyor! ('+n+' birim)');
-    enemyFactory.waveSize=Math.min(18,enemyFactory.waveSize+2);
+    enemyFactory.waveSize=Math.min(10,enemyFactory.waveSize+1); // max 10, +1 artış
   }
   enemyFactory.resources+=0.35; // düşman kaynak geliri (combined arms için yeterli)
   enemyFactory.spawnTimer++;
@@ -1233,34 +1241,18 @@ function update(){
           }
         }
       } else {
-        // BEKLEMEDE: savunma modu
-        const defendRange=(t.unitType==='heli'?(t.range||420):((t.unitType==='bradley'||t.unitType==='stryker')?t.range:STATS.range))*0.9;
+        // BEKLEMEDE: RWR rally mantığı
+        // Sadece çok yakın tehdit varsa savaş — uzak düşmana gitme, dalga emri bekle
         const homeDist=Math.hypot(t.x-t.homeX,t.y-t.homeY);
-        if(tg && td<=defendRange && homeDist<200){
-          if(td>defendRange*0.75){
-            // FIX 3 (flanking): su kontrolü eklendi
-            t._flankTimer=(t._flankTimer||0)+1;
-            if(t._flankTimer>120){
-              t._flankSide=!t._flankSide;
-              t._flankTimer=0;
-            }
-            if(t._flankTimer<60&&t.unitType!=='soldier'){
-              const fp=calcFlankPos(t,tg,t._flankSide);
-              // FIX 3: flank noktası suda mı? öyleyse direkt saldır
-              if(!isWater(fp.x,fp.y)){
-                t.tx=fp.x; t.ty=fp.y;
-              } else {
-                t.tx=tg.x; t.ty=tg.y;
-              }
-            } else {
-              t.tx=tg.x; t.ty=tg.y;
-            }
-          } else {
-            t.tx=t.x; t.ty=t.y;
-          }
+        // Savunma menzili: sadece rally noktasının yakınında bir tehdide cevap ver
+        const immediateThreats = (t.unitType==='heli') ? (t.range||420)*0.5 : STATS.radius*8;
+        if(tg && td <= immediateThreats){
+          // Çok yakın tehdit: yerinde dur ve ateş et
+          t.tx=t.x; t.ty=t.y;
         } else {
-          // Rally noktasında bekle
-          if(homeDist>35){t.tx=t.homeX;t.ty=t.homeY;}else{t.tx=t.x;t.ty=t.y;}
+          // Tehdit yok veya uzak: rally noktasında bekle
+          if(homeDist > 40){ t.tx=t.homeX; t.ty=t.homeY; }
+          else { t.tx=t.x; t.ty=t.y; }
         }
       }
     }
