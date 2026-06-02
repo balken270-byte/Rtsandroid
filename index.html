@@ -19,7 +19,7 @@
   #pauseOverlay.show { display:flex; }
   #pauseOverlay h1 { font-size:28px; }
   #pauseOverlay button { background:#2c6fa3; color:#fff; border:none; border-radius:12px; padding:14px 32px; font-size:18px; }
-</style></head><body><div id="hud">RTS <b>v4.5</b> — Denge güncellemesi · <b>build 7</b></div>
+</style></head><body><div id="hud">RTS <b>v4.5</b> — Denge güncellemesi · <b>build 8</b></div>
 <div id="build">
   <button id="bTank" class="active">🔧 Tank<br>100</button>
   <button id="bHeli">🚁 Heli<br>150</button>
@@ -696,7 +696,7 @@ function buildIslandTerrain(){
     if(!terrainImgs[n]||!terrainImgs[n].complete||!terrainImgs[n].naturalWidth)return false;
   }
   // Cozunurluk: her hucre 32px (90x60 -> 2880x1920). Detayli ama makul.
-  const CELL=32;
+  const CELL=40; // Büyük tile = az sınır
   const cw=ISLAND_GW*CELL, ch=ISLAND_GH*CELL;
   const cv=document.createElement('canvas');cv.width=cw;cv.height=ch;
   const c=cv.getContext('2d');
@@ -763,6 +763,58 @@ function buildIslandTerrain(){
       }
     }
   }
+  // === NOISE OVERLAY: tile sınırlarını gizle ===
+  // RWR detail layer mantığı: zemin üstüne organik gürültü katmanı
+  // Birden fazla frekans (oktav) = doğal görünüm
+  const noiseCanvas = document.createElement('canvas');
+  noiseCanvas.width = cw; noiseCanvas.height = ch;
+  const nc = noiseCanvas.getContext('2d');
+  
+  // Basit value noise: rastgele grid + bilinear interpolasyon
+  const NW = 24, NH = 24; // noise grid boyutu
+  const noiseGrid = new Float32Array(NW * NH);
+  for(let i = 0; i < NW * NH; i++) noiseGrid[i] = Math.random();
+  
+  function sampleNoise(x, y) {
+    // Bilinear interpolation ile yumuşak noise
+    const gx = x * (NW-1), gy = y * (NH-1);
+    const ix = Math.floor(gx), iy = Math.floor(gy);
+    const fx = gx - ix, fy = gy - iy;
+    const i00 = noiseGrid[Math.min(iy,NH-1)*NW + Math.min(ix,NW-1)];
+    const i10 = noiseGrid[Math.min(iy,NH-1)*NW + Math.min(ix+1,NW-1)];
+    const i01 = noiseGrid[Math.min(iy+1,NH-1)*NW + Math.min(ix,NW-1)];
+    const i11 = noiseGrid[Math.min(iy+1,NH-1)*NW + Math.min(ix+1,NW-1)];
+    return (i00*(1-fx)+i10*fx)*(1-fy) + (i01*(1-fx)+i11*fx)*fy;
+  }
+
+  // Noise'u imageData olarak yaz — çok daha hızlı
+  const imgData = nc.createImageData(cw, ch);
+  const d = imgData.data;
+  for(let py = 0; py < ch; py++) {
+    for(let px = 0; px < cw; px++) {
+      const nx = px / cw, ny = py / ch;
+      // 3 oktav: büyük dalga + orta + ince detay
+      const n = sampleNoise(nx, ny) * 0.55
+              + sampleNoise(nx*2.7+0.3, ny*2.7+0.7) * 0.30
+              + sampleNoise(nx*6.1+0.9, ny*6.1+0.1) * 0.15;
+      // Sadece karanlık/aydınlık varyasyon — renk değişmez
+      const v = Math.round((n - 0.5) * 38); // -19..+19 parlaklık
+      const idx = (py * cw + px) * 4;
+      d[idx]   = 128 + v; // R
+      d[idx+1] = 128 + v; // G
+      d[idx+2] = 128 + v; // B
+      d[idx+3] = 48;       // Alpha: hafif (tile sınırı gizlenir ama renk bozulmaz)
+    }
+  }
+  nc.putImageData(imgData, 0, 0);
+  
+  // Overlay'i overlay blend moduyla terrain canvas'a uygula
+  c.globalCompositeOperation = 'overlay';
+  c.globalAlpha = 0.55;
+  c.drawImage(noiseCanvas, 0, 0);
+  c.globalCompositeOperation = 'source-over';
+  c.globalAlpha = 1;
+
   islandTerrainCanvas=cv;
   return true;
 }
