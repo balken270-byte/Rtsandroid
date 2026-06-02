@@ -1050,45 +1050,79 @@ function update(){
   for(const b of bullets){let best=null,bd=999;for(const t of tanks){if(t.alive&&t.team!==b.team){const d=dist(b.x,b.y,t.x,t.y);if(d<bd&&d<60){bd=d;best=t;}}}if(best)best.incomingDmg+=b.dmg;}
   // düşman kışlası tank üretir
   // DALGA HALİNDE SALDIRI: yeterli birim biriktiyse toplu saldır
-  enemyFactory.waveSize=enemyFactory.waveSize||4; // ilk dalga icin minimum birim
+  enemyFactory.waveSize=enemyFactory.waveSize||4;
   const reserves=tanks.filter(t=>t.alive&&t.team==='enemy'&&!t.focusTarget&&!t.hasOrder);
+
+  // FIX: Rally'de çok uzun beklemeyi önle — 8 saniyeden uzun bekleyenler saldırıya geç
+  for(const t of tanks){
+    if(!t.alive||t.team!=='enemy'||t.hasOrder||t.focusTarget)continue;
+    t._rallyTimer=(t._rallyTimer||0)+1;
+    if(t._rallyTimer>480){ // 8sn (60fps*8)
+      t.hasOrder=true;
+      t._rallyTimer=0;
+    }
+  }
+
   if(reserves.length>=enemyFactory.waveSize){
-    // Oyuncu birimlerini bul - onlara yonel
     const playerUnits=tanks.filter(t=>t.alive&&t.team==='player');
     const n=reserves.length;
-    const cols=Math.ceil(Math.sqrt(n));const sp=STATS.radius*2.8;
-    // Dalga gruplanması: tanklar önde, askerler arkada
-    const frontUnits=reserves.filter(t=>t.unitType!=='soldier'&&t.unitType!=='heli');
-    const backUnits=reserves.filter(t=>t.unitType==='soldier'||t.unitType==='heli');
-    
-    reserves.forEach((t,i)=>{
-      // Her birimi en yakın oyuncu birimine hedefle (akıllı dağılım)
+    const sp=STATS.radius*2.8;
+
+    // FIX 1: AKILLI SCATTER — her düşman birimine en uzak oyuncu birimi atanır
+    // Böylece birimler yığılmaz, geniş cepheye dağılır
+    const assigned = new Map(); // playerUnit -> kaç düşman atandı
+    playerUnits.forEach(p=>assigned.set(p,0));
+
+    // Önce tanklar/bradley/stryker öne, askerler/heli arkaya sırala
+    const sorted = [...reserves].sort((a,b)=>{
+      const rankA = (a.unitType==='soldier'||a.unitType==='heli')?1:0;
+      const rankB = (b.unitType==='soldier'||b.unitType==='heli')?1:0;
+      return rankA-rankB;
+    });
+
+    sorted.forEach((t,i)=>{
       let targetX,targetY;
       if(playerUnits.length>0){
-        // Birim indeksine göre farklı oyuncu birimlerini hedefle (scatter)
-        const targetP=playerUnits[i % playerUnits.length];
-        // Birim etrafına dağıl (top-push formation)
-        const ang=(i/n)*Math.PI*2;
-        const spread=sp*Math.ceil(n/4)*0.4;
-        targetX=targetP.x+(i<cols?0:Math.cos(ang)*spread);
-        targetY=targetP.y+(i<cols?0:Math.sin(ang)*spread);
+        // Her birimi en az hedeflenmiş oyuncu birimine ata (yük dengesi)
+        let bestP=null,minCount=Infinity;
+        for(const [p,cnt] of assigned){
+          if(cnt<minCount){minCount=cnt;bestP=p;}
+        }
+        assigned.set(bestP,(assigned.get(bestP)||0)+1);
+
+        // Hedef etrafına dağıl: her birim farklı açıdan yaklaşır
+        const ang=(i/n)*Math.PI*2+Math.random()*0.5;
+        const spread=sp*1.5;
+        targetX=bestP.x+Math.cos(ang)*spread;
+        targetY=bestP.y+Math.sin(ang)*spread;
       } else {
-        // Oyuncu yoksa: fabrika kareye git
-        const col=i%cols, row=Math.floor(i/cols);
-        targetX=factory.x+(col-(cols-1)/2)*sp;
-        targetY=factory.y+factory.h/2+100+(row-(cols-1)/2)*sp;
+        const col=i%Math.ceil(Math.sqrt(n)),row=Math.floor(i/Math.ceil(Math.sqrt(n)));
+        targetX=factory.x+(col-(Math.ceil(Math.sqrt(n))-1)/2)*sp;
+        targetY=factory.y+factory.h/2+100+(row-(Math.ceil(Math.sqrt(n))-1)/2)*sp;
       }
-      // Su kontrolü: kara birimi suya atanmasın
+
+      // Su kontrolü — kara birimi için dry land ara
       if(t.unitType!=='heli'&&isWater(targetX,targetY)){
-        // Fabrika önünde topla
-        const fc=i%cols, fr=Math.floor(i/cols);
-        targetX=enemyFactory.x+(fc-(cols-1)/2)*sp;
-        targetY=enemyFactory.y-enemyFactory.h/2-120+(fr-(cols-1)/2)*sp;
+        // En yakın kuru zemini bul (spiral arama)
+        let found=false;
+        for(let r=D_TW;r<=D_TW*8&&!found;r+=D_TW){
+          for(let a=0;a<Math.PI*2&&!found;a+=0.4){
+            const tx2=targetX+Math.cos(a)*r, ty2=targetY+Math.sin(a)*r;
+            if(!isWater(tx2,ty2)){targetX=tx2;targetY=ty2;found=true;}
+          }
+        }
+        if(!found){ // spiral başarısız — enemy factory önüne çek
+          const col=i%Math.ceil(Math.sqrt(n));
+          targetX=enemyFactory.x+(col-(Math.ceil(Math.sqrt(n))-1)/2)*sp;
+          targetY=enemyFactory.y-enemyFactory.h/2-120;
+        }
       }
+
       t.tx=targetX; t.ty=targetY;
       t.homeX=targetX; t.homeY=targetY;
       t.hasOrder=true;
-      t._flankTimer=Math.floor(Math.random()*120); // desenkronize flanking
+      t._rallyTimer=0;
+      t._flankTimer=Math.floor(Math.random()*120);
       t._flankSide=(i%2===0);
     });
     flashStatus('⚔️ Düşman dalgası saldırıyor! ('+n+' birim)');
@@ -1141,32 +1175,45 @@ function update(){
     }
     if(t.team==='enemy'){
       if(t.hasOrder){
-        // DALGA EMRI VAR: hedefe saldir - akıllı yaklaşım
+        // DALGA EMRİ VAR: hedefe saldır
         if(tg){
           const attackRange=(t.range||STATS.range)*0.8;
           if(td>attackRange){
-            // Flow field navigasyonla yaklaş
+            // FIX 2: Hedefi her frame güncelle — oyuncu hareket edince kayma yok
             t.tx=tg.x; t.ty=tg.y;
           } else {
-            // Menzildeyse dur ve ateş et (titreme yok)
+            // Menzilde: dur ateş et
             t.tx=t.x; t.ty=t.y;
           }
+          // Hedef öldüyse: hasOrder sıfırla, yeni dalga bekle
+          if(!tg.alive){ t.hasOrder=false; t._rallyTimer=0; }
+        } else {
+          // Düşman yok: factory önüne dön
+          t.hasOrder=false; t._rallyTimer=0;
+          t.tx=enemyFactory.x+(Math.random()-0.5)*120;
+          t.ty=enemyFactory.y-enemyFactory.h/2-80;
+          t.homeX=t.tx; t.homeY=t.ty;
         }
       } else {
-        // BEKLEMEDE: savunma modu - yakın düşmana karşı flanking
+        // BEKLEMEDE: savunma modu
         const defendRange=(t.unitType==='heli'?(t.range||420):((t.unitType==='bradley'||t.unitType==='stryker')?t.range:STATS.range))*0.9;
         const homeDist=Math.hypot(t.x-t.homeX,t.y-t.homeY);
-        if(tg && td<=defendRange && homeDist<180){
+        if(tg && td<=defendRange && homeDist<200){
           if(td>defendRange*0.75){
-            // Flanking hareketi: zaman zaman yana konumlan
+            // FIX 3 (flanking): su kontrolü eklendi
             t._flankTimer=(t._flankTimer||0)+1;
-            if(t._flankTimer>120){ // 2sn'de bir flank değiştir
+            if(t._flankTimer>120){
               t._flankSide=!t._flankSide;
               t._flankTimer=0;
             }
             if(t._flankTimer<60&&t.unitType!=='soldier'){
               const fp=calcFlankPos(t,tg,t._flankSide);
-              t.tx=fp.x; t.ty=fp.y;
+              // FIX 3: flank noktası suda mı? öyleyse direkt saldır
+              if(!isWater(fp.x,fp.y)){
+                t.tx=fp.x; t.ty=fp.y;
+              } else {
+                t.tx=tg.x; t.ty=tg.y;
+              }
             } else {
               t.tx=tg.x; t.ty=tg.y;
             }
@@ -1174,7 +1221,7 @@ function update(){
             t.tx=t.x; t.ty=t.y;
           }
         } else {
-          // rally noktasında bekle
+          // Rally noktasında bekle
           if(homeDist>35){t.tx=t.homeX;t.ty=t.homeY;}else{t.tx=t.x;t.ty=t.y;}
         }
       }
