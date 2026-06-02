@@ -19,7 +19,7 @@
   #pauseOverlay.show { display:flex; }
   #pauseOverlay h1 { font-size:28px; }
   #pauseOverlay button { background:#2c6fa3; color:#fff; border:none; border-radius:12px; padding:14px 32px; font-size:18px; }
-</style></head><body><div id="hud">RTS <b>v4.5</b> — Denge güncellemesi · <b>build 9</b></div>
+</style></head><body><div id="hud">RTS <b>v4.5</b> — Denge güncellemesi · <b>build 8</b></div>
 <div id="build">
   <button id="bTank" class="active">🔧 Tank<br>100</button>
   <button id="bHeli">🚁 Heli<br>150</button>
@@ -691,138 +691,133 @@ function genObstacles(){
 // === ADA TERRAIN ÖNCEDEN ÜRETME (yumusak gecisli, off-screen) ===
 let islandTerrainCanvas=null;
 function buildIslandTerrain(){
+  // Tum dokular yuklendi mi?
   for(const n of ['grass','sand','stone','water']){
     if(!terrainImgs[n]||!terrainImgs[n].complete||!terrainImgs[n].naturalWidth)return false;
   }
-  // CELL: her grid hücresinin pixel boyutu (offscreen canvas'ta)
-  const CELL = 40;
-  const cw = ISLAND_GW * CELL, ch = ISLAND_GH * CELL;
-  const cv = document.createElement('canvas'); cv.width=cw; cv.height=ch;
-  const c = cv.getContext('2d');
-  c.imageSmoothingEnabled = true;
-  c.imageSmoothingQuality = 'high';
-
-  // TERRAIN TIPI LOOKUP
-  // 0=water, 1=grass, 2=water(su), 3=stone — D_GRID'den
-  const ttype = (gx,gy) => {
-    if(gx<0||gx>=ISLAND_GW||gy<0||gy>=ISLAND_GH) return 0;
-    const v = D_GRID[gy*ISLAND_GW+gx];
-    if(v===2) return 0; // su
-    return 1;           // kara (grass)
-  };
-
-  // === ADIM 1: Her terrain tipi için BİR KEZ tüm canvas'a pattern doldur ===
-  // Tile sınırı SIFIR — her doku kesintisiz devam ediyor
-  // Sadece ilgili bölgeler clip mask ile görünür
-  const terrainOrder = ['water','grass']; // water önce, grass üste
-  const terrainCheck = { water: (t)=>t===0, grass: (t)=>t===1 };
-
-  for(const tname of terrainOrder){
-    const img = terrainImgs[tname];
-    if(!img||!img.complete) continue;
-    const pat = c.createPattern(img,'repeat');
-
-    // Bu terrain tipine ait tüm hücreleri birleşik path olarak çiz
-    // Path = bitişik hücreler tek shape → SIFIR iç sınır
-    c.save();
-    c.beginPath();
-    for(let gy=0; gy<ISLAND_GH; gy++){
-      for(let gx=0; gx<ISLAND_GW; gx++){
-        if(terrainCheck[tname](ttype(gx,gy))){
-          // Math.floor ile sub-pixel hatasını önle
-          const px = Math.floor(gx*CELL);
-          const py = Math.floor(gy*CELL);
-          const pw = Math.ceil((gx+1)*CELL) - px;
-          const ph = Math.ceil((gy+1)*CELL) - py;
-          c.rect(px, py, pw, ph);
-        }
-      }
+  // Cozunurluk: her hucre 32px (90x60 -> 2880x1920). Detayli ama makul.
+  const CELL=40; // Büyük tile = az sınır
+  const cw=ISLAND_GW*CELL, ch=ISLAND_GH*CELL;
+  const cv=document.createElement('canvas');cv.width=cw;cv.height=ch;
+  const c=cv.getContext('2d');
+  const img={grass:terrainImgs.grass,sand:terrainImgs.sand,stone:terrainImgs.stone,water:terrainImgs.water};
+  const at=(gx,gy)=>{if(gx<0||gx>=ISLAND_GW||gy<0||gy>=ISLAND_GH)return 0;return D_GRID[gy*ISLAND_GW+gx]===2?0:1;};
+  // pattern'lar (dunya-sabit doku)
+  const pat={};
+  for(const n in img)pat[n]=c.createPattern(img[n],'repeat');
+  const tname={0:'water',1:'grass',2:'sand',3:'stone'};
+  // 1) TABAN: her hucreyi kendi dokusuyla doldur
+  for(let gy=0;gy<ISLAND_GH;gy++){
+    for(let gx=0;gx<ISLAND_GW;gx++){
+      const t=at(gx,gy);
+      c.save();c.beginPath();c.rect(gx*CELL,gy*CELL,CELL+1,CELL+1);c.clip();
+      c.fillStyle=pat[tname[t]]||'#5a7048';
+      c.fillRect(gx*CELL,gy*CELL,CELL+1,CELL+1);
+      c.restore();
     }
-    c.fillStyle = pat;
-    c.fill();
-    c.restore();
   }
-
-  // === ADIM 2: TERRAIN GEÇİŞ KENARLARINI YUMUŞAT ===
-  // Su-kara sınırında gradient ile blend
-  const prio = {water:0, grass:1};
-  for(let gy=0; gy<ISLAND_GH; gy++){
-    for(let gx=0; gx<ISLAND_GW; gx++){
-      const t = ttype(gx,gy);
-      const tn = t===0?'water':'grass';
-      const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+  // 2) YUMUSAK GECIS: her hucrenin farkli komsusuna dogru kendi dokusunu yumusak (gradient alpha) tasir
+  // oncelik: su en altta kalsin, kara dokular suya tasar; cimen<kum<tas oncelik
+  const prio={water:0,grass:1,sand:2,stone:3};
+  for(let gy=0;gy<ISLAND_GH;gy++){
+    for(let gx=0;gx<ISLAND_GW;gx++){
+      const t=at(gx,gy); const tn=tname[t];
+      // 4 komsu
+      const dirs=[[1,0],[-1,0],[0,1],[0,-1]];
       for(const [dx,dy] of dirs){
-        const nt = ttype(gx+dx, gy+dy);
-        const nn = nt===0?'water':'grass';
-        if(nt===t) continue;
-        if((prio[tn]||0) <= (prio[nn]||0)) continue;
-
-        const ox = Math.floor(gx*CELL), oy = Math.floor(gy*CELL);
-        const OV = Math.ceil(CELL*0.7); // geçiş genişliği
-
+        const nt=at(gx+dx,gy+dy); const nn=tname[nt];
+        if(nt===t)continue;
+        // yuksek oncelikli olan komsuya tasar (yumusak kenar)
+        if(prio[tn]<=prio[nn])continue;
+        // bu hucrenin dokusunu komsu kenarina gradient alpha ile bindir
+        const ox=gx*CELL, oy=gy*CELL;
         c.save();
-        let rx,ry,rw,rh,gx0,gy0,gx1,gy1;
-        if(dx===1)      {rx=ox+CELL-1;ry=oy;rw=OV;rh=CELL;gx0=ox+CELL;gy0=oy;gx1=ox+CELL+OV;gy1=oy;}
-        else if(dx===-1){rx=ox-OV+1;ry=oy;rw=OV;rh=CELL;gx0=ox;gy0=oy;gx1=ox-OV;gy1=oy;}
-        else if(dy===1) {rx=ox;ry=oy+CELL-1;rw=CELL;rh=OV;gx0=ox;gy0=oy+CELL;gx1=ox;gy1=oy+CELL+OV;}
-        else            {rx=ox;ry=oy-OV+1;rw=CELL;rh=OV;gx0=ox;gy0=oy;gx1=ox;gy1=oy-OV;}
-
-        c.beginPath();
-        c.rect(rx,ry,rw,rh);
+        // kenar bolgesi (komsuya dogru yarim hucre)
+        let rx=ox,ry=oy,rw=CELL,rh=CELL;
+        let gx0,gy0,gx1,gy1;
+        const OV=CELL*0.6; // tasma miktari
+        if(dx===1){rx=ox+CELL-2;rw=OV;gx0=ox+CELL;gy0=oy;gx1=ox+CELL+OV;gy1=oy;}
+        else if(dx===-1){rx=ox-OV+2;rw=OV;gx0=ox;gy0=oy;gx1=ox-OV;gy1=oy;}
+        else if(dy===1){ry=oy+CELL-2;rh=OV;gx0=ox;gy0=oy+CELL;gx1=ox;gy1=oy+CELL+OV;}
+        else {ry=oy-OV+2;rh=OV;gx0=ox;gy0=oy;gx1=ox;gy1=oy-OV;}
+        c.beginPath();c.rect(Math.min(rx,rx+rw)-1,Math.min(ry,ry+rh)-1,Math.abs(rw)+2+(dx?0:CELL),Math.abs(rh)+2+(dy?0:CELL));
+        // dogru dikdortgen
+        c.restore();
+        c.save();
+        if(dx!==0){c.rect(dx===1?ox+CELL-2:ox-OV+2,oy,OV,CELL);}
+        else{c.rect(ox,dy===1?oy+CELL-2:oy-OV+2,CELL,OV);}
         c.clip();
-
-        // Önce dokuyu çiz
-        const pat2 = c.createPattern(terrainImgs[tn],'repeat');
-        c.fillStyle = pat2;
-        c.fillRect(rx,ry,rw,rh);
-
-        // Gradient mask ile alpha uygula
-        const grad = c.createLinearGradient(gx0,gy0,gx1,gy1);
-        grad.addColorStop(0,'rgba(255,255,255,0.9)');
+        const grad=c.createLinearGradient(gx0,gy0,gx1,gy1);
+        grad.addColorStop(0,'rgba(255,255,255,0.85)');
         grad.addColorStop(1,'rgba(255,255,255,0)');
-        c.globalCompositeOperation = 'destination-in';
-        c.fillStyle = grad;
-        c.fillRect(rx,ry,rw,rh);
+        c.globalAlpha=1;
+        // dokuyu cizip alpha maskele: once doku, sonra destination-in ile gradient
+        c.fillStyle=pat[tn];
+        if(dx!==0)c.fillRect(dx===1?ox+CELL-2:ox-OV+2,oy,OV,CELL);
+        else c.fillRect(ox,dy===1?oy+CELL-2:oy-OV+2,CELL,OV);
+        c.globalCompositeOperation='destination-in';
+        c.fillStyle=grad;
+        if(dx!==0)c.fillRect(dx===1?ox+CELL-2:ox-OV+2,oy,OV,CELL);
+        else c.fillRect(ox,dy===1?oy+CELL-2:oy-OV+2,CELL,OV);
         c.restore();
       }
     }
   }
+  // === NOISE OVERLAY: tile sınırlarını gizle ===
+  // RWR detail layer mantığı: zemin üstüne organik gürültü katmanı
+  // Birden fazla frekans (oktav) = doğal görünüm
+  const noiseCanvas = document.createElement('canvas');
+  noiseCanvas.width = cw; noiseCanvas.height = ch;
+  const nc = noiseCanvas.getContext('2d');
+  
+  // Basit value noise: rastgele grid + bilinear interpolasyon
+  const NW = 24, NH = 24; // noise grid boyutu
+  const noiseGrid = new Float32Array(NW * NH);
+  for(let i = 0; i < NW * NH; i++) noiseGrid[i] = Math.random();
+  
+  function sampleNoise(x, y) {
+    // Bilinear interpolation ile yumuşak noise
+    const gx = x * (NW-1), gy = y * (NH-1);
+    const ix = Math.floor(gx), iy = Math.floor(gy);
+    const fx = gx - ix, fy = gy - iy;
+    const i00 = noiseGrid[Math.min(iy,NH-1)*NW + Math.min(ix,NW-1)];
+    const i10 = noiseGrid[Math.min(iy,NH-1)*NW + Math.min(ix+1,NW-1)];
+    const i01 = noiseGrid[Math.min(iy+1,NH-1)*NW + Math.min(ix,NW-1)];
+    const i11 = noiseGrid[Math.min(iy+1,NH-1)*NW + Math.min(ix+1,NW-1)];
+    return (i00*(1-fx)+i10*fx)*(1-fy) + (i01*(1-fx)+i11*fx)*fy;
+  }
 
-  // === ADIM 3: HAFIF NOISE — doku tekrarını kır, doğal zemin hissi ===
-  // Tile-based değil: tüm canvas'a tek geçişte pixel noise
-  const idata = c.getImageData(0,0,cw,ch);
-  const px = idata.data;
-  // Küçük value noise grid
-  const NG = 32;
-  const ng = new Float32Array(NG*NG);
-  for(let i=0;i<NG*NG;i++) ng[i]=Math.random();
-  const sn=(nx,ny)=>{
-    const gx2=nx*(NG-1), gy2=ny*(NG-1);
-    const ix=Math.floor(gx2), iy=Math.floor(gy2);
-    const fx=gx2-ix, fy=gy2-iy;
-    const a=ng[Math.min(iy,NG-1)*NG+Math.min(ix,NG-1)];
-    const b=ng[Math.min(iy,NG-1)*NG+Math.min(ix+1,NG-1)];
-    const cc2=ng[Math.min(iy+1,NG-1)*NG+Math.min(ix,NG-1)];
-    const d=ng[Math.min(iy+1,NG-1)*NG+Math.min(ix+1,NG-1)];
-    return (a*(1-fx)+b*fx)*(1-fy)+(cc2*(1-fx)+d*fx)*fy;
-  };
-  for(let y=0;y<ch;y++){
-    for(let x=0;x<cw;x++){
-      const i=(y*cw+x)*4;
-      if(px[i+3]<10) continue; // transparan pikseli atla
-      const n=sn(x/cw,y/ch)*0.6+sn(x*3.1/cw+0.3,y*3.1/ch+0.7)*0.25+sn(x*7/cw,y*7/ch)*0.15;
-      const v=Math.round((n-0.5)*28); // ±14 parlaklık
-      px[i]  =Math.max(0,Math.min(255,px[i]  +v));
-      px[i+1]=Math.max(0,Math.min(255,px[i+1]+v));
-      px[i+2]=Math.max(0,Math.min(255,px[i+2]+v));
+  // Noise'u imageData olarak yaz — çok daha hızlı
+  const imgData = nc.createImageData(cw, ch);
+  const d = imgData.data;
+  for(let py = 0; py < ch; py++) {
+    for(let px = 0; px < cw; px++) {
+      const nx = px / cw, ny = py / ch;
+      // 3 oktav: büyük dalga + orta + ince detay
+      const n = sampleNoise(nx, ny) * 0.55
+              + sampleNoise(nx*2.7+0.3, ny*2.7+0.7) * 0.30
+              + sampleNoise(nx*6.1+0.9, ny*6.1+0.1) * 0.15;
+      // Sadece karanlık/aydınlık varyasyon — renk değişmez
+      const v = Math.round((n - 0.5) * 38); // -19..+19 parlaklık
+      const idx = (py * cw + px) * 4;
+      d[idx]   = 128 + v; // R
+      d[idx+1] = 128 + v; // G
+      d[idx+2] = 128 + v; // B
+      d[idx+3] = 48;       // Alpha: hafif (tile sınırı gizlenir ama renk bozulmaz)
     }
   }
-  c.putImageData(idata,0,0);
+  nc.putImageData(imgData, 0, 0);
+  
+  // Overlay'i overlay blend moduyla terrain canvas'a uygula
+  c.globalCompositeOperation = 'overlay';
+  c.globalAlpha = 0.55;
+  c.drawImage(noiseCanvas, 0, 0);
+  c.globalCompositeOperation = 'source-over';
+  c.globalAlpha = 1;
 
   islandTerrainCanvas=cv;
   return true;
 }
-
 let groundDetails=[];
 function genGroundDetails(){
   groundDetails=[];
@@ -959,34 +954,20 @@ function getEnemyTinted(img) {
     return c;
   } catch(e) { return null; }
 }
-// Görseli silüet (siyah dolu) olarak çiz - ÖNBELLEKLİ (filter her frame yerine bir kez)
-const _shadowCache = new Map();
-function getShadowSilhouette(img){
-  if(!img||!img.complete||!img.naturalWidth)return null;
-  let c=_shadowCache.get(img);
-  if(c)return c;
-  try{
-    c=document.createElement('canvas');
-    c.width=img.naturalWidth;c.height=img.naturalHeight;
-    const cc=c.getContext('2d');
-    cc.drawImage(img,0,0);
-    cc.globalCompositeOperation='source-in';
-    cc.fillStyle='#000';cc.fillRect(0,0,c.width,c.height);
-    _shadowCache.set(img,c);
-    return c;
-  }catch(e){return null;}
-}
+// Görseli silüet (siyah dolu) olarak çiz - canvas filter ile
 function drawShadowSprite(img,dx,dy,w,h,angle,centerOffsetX,centerOffsetY){
   if(!img||!img.complete)return;
-  const sil=getShadowSilhouette(img);
-  if(!sil)return;
   centerOffsetX=centerOffsetX||0;centerOffsetY=centerOffsetY||0;
   ctx.save();
   ctx.globalAlpha=SHADOW_ALPHA;
   ctx.translate(dx+SHADOW_DX,dy+SHADOW_DY);
   if(angle)ctx.rotate(angle);
+  // CSS filter ile siyah silüet: brightness 0 + saturation 0 (sadece alpha kalır)
+  ctx.filter='brightness(0)';
+  // gölge hafif küçük (yere oturmuş hissi, %92)
   const gs=0.92;
-  ctx.drawImage(sil,(-w/2+centerOffsetX)*gs,(-h/2+centerOffsetY)*gs,w*gs,h*gs);
+  ctx.drawImage(img,(-w/2+centerOffsetX)*gs,(-h/2+centerOffsetY)*gs,w*gs,h*gs);
+  ctx.filter='none';
   ctx.restore();
 }
 function smoke(x,y,big){if(smokes.length>250)return;smokes.push({x,y,r:big?6:3,life:1,vy:-0.5-Math.random()*0.5,vx:(Math.random()-0.5)*0.4,grow:big?0.9:0.4});}
@@ -1958,15 +1939,15 @@ function drawChinook(t){
   const offX=hw*0.25*flyAmount, offY=hh*0.30*flyAmount;
   ctx.translate(sx+offX,sy+offY);
   ctx.rotate(t.hullAngle+Math.PI/2);
-  const ch47Sil=getShadowSilhouette(ch47Img), rotorSil=getShadowSilhouette(ch47RotorImg);
-  if(ch47Sil)ctx.drawImage(ch47Sil,-hw/2,-hh/2,hw,hh);
+  ctx.filter='brightness(0)';
+  if(ch47Img.complete)ctx.drawImage(ch47Img,-hw/2,-hh/2,hw,hh);
   // Pervane gölgeleri (silüette de görünsün)
   const sFront=-hh*0.41, sBack=hh*0.28;
-  if(rotorSil){
-    ctx.save();ctx.translate(0,sFront);ctx.rotate(t.rotorAngle);ctx.drawImage(rotorSil,-rw/2,-rh/2,rw,rh);ctx.restore();
-    ctx.save();ctx.translate(0,sBack);ctx.rotate(t.rotor2Angle);ctx.drawImage(rotorSil,-rw/2,-rh/2,rw,rh);ctx.restore();
+  if(ch47RotorImg.complete){
+    ctx.save();ctx.translate(0,sFront);ctx.rotate(t.rotorAngle);ctx.drawImage(ch47RotorImg,-rw/2,-rh/2,rw,rh);ctx.restore();
+    ctx.save();ctx.translate(0,sBack);ctx.rotate(t.rotor2Angle);ctx.drawImage(ch47RotorImg,-rw/2,-rh/2,rw,rh);ctx.restore();
   }
-  ctx.restore();
+  ctx.filter='none';ctx.restore();
   // GÖVDE (havada)
   ctx.save();ctx.globalAlpha=alpha;ctx.translate(sx,sy-fly+bob);ctx.rotate(t.hullAngle+Math.PI/2);
   if(ch47Img.complete)ctx.drawImage(ch47Img,-hw/2,-hh/2,hw,hh);
@@ -2002,12 +1983,12 @@ function drawHeli(t){
   ctx.save();ctx.globalAlpha=alpha*0.5;
   ctx.translate(sx+hw*0.4,sy+hh*0.45); // havada olduğu için daha kayık
   ctx.rotate(t.hullAngle+Math.PI/2);
-  const heliSil=getShadowSilhouette(heliImg), rotorSilA=getShadowSilhouette(rotorImg);
-  if(heliSil)ctx.drawImage(heliSil,-hw/2,-hh/2,hw,hh);
+  ctx.filter='brightness(0)';
+  if(heliImg.complete)ctx.drawImage(heliImg,-hw/2,-hh/2,hw,hh);
   // Apache pervane gölgesi (göbekte, dönen)
   {const hubX=(HUB_X-0.5)*hw, hubY=(HUB_Y-0.5)*hh;
-   if(rotorSilA){ctx.save();ctx.translate(hubX,hubY);ctx.rotate(t.rotorAngle);ctx.drawImage(rotorSilA,-rw/2,-rh/2,rw,rh);ctx.restore();}}
-  ctx.restore();
+   if(rotorImg.complete){ctx.save();ctx.translate(hubX,hubY);ctx.rotate(t.rotorAngle);ctx.drawImage(rotorImg,-rw/2,-rh/2,rw,rh);ctx.restore();}}
+  ctx.filter='none';ctx.restore();
   // 2) GÖVDE (yukarıda)
   ctx.save();ctx.globalAlpha=alpha;ctx.translate(sx,sy-fly+bob);ctx.rotate(t.hullAngle+Math.PI/2);
   if(heliImg.complete)ctx.drawImage(heliImg,-hw/2,-hh/2,hw,hh);
@@ -2233,11 +2214,11 @@ function drawObstacles(){
     ctx.translate(sx,sy);
     if(o.rot)ctx.rotate(o.rot);
     if(o.flip)ctx.scale(-1,1);
-    // GÖLGE (zemine otursun) - su disinda. UCUZ: filter blur yerine yarı saydam elips
+    // GÖLGE (zemine otursun) - su disinda
     if(o.type!=='water'){
-      ctx.save();ctx.globalAlpha=0.28;ctx.fillStyle='#000';
-      ctx.beginPath();ctx.ellipse(2*z,dh*0.30,dw*0.42,dh*0.20,0,0,Math.PI*2);ctx.fill();
-      ctx.restore();
+      ctx.save();ctx.globalAlpha=0.32;ctx.filter='brightness(0) blur('+(2*z)+'px)';
+      ctx.drawImage(img,-dw/2+3*z,-dh/2+5*z,dw,dh);
+      ctx.filter='none';ctx.restore();
     }
     ctx.drawImage(img,-dw/2,-dh/2,dw,dh);
     ctx.restore();
@@ -2252,10 +2233,13 @@ function drawFactory(){
       const cc=c.getContext('2d');cc.drawImage(facImg,0,0);cc.globalCompositeOperation='source-in';cc.fillStyle='#000';cc.fillRect(0,0,c.width,c.height);
       window._facShadow=c;
     }
-    // UCUZ temas gölgesi: filter blur yerine yarı saydam elips (donma önler)
-    ctx.save();ctx.globalAlpha=0.34;ctx.fillStyle='#000';
-    ctx.beginPath();ctx.ellipse(sx+fw*0.04,sy+fh*0.34,fw*0.40,fh*0.16,0,0,Math.PI*2);ctx.fill();
-    ctx.restore();
+    // KATMAN 1 - temas gölgesi: binanın tam dibine oturan koyu, dar silüet (zemine gömme hissi)
+    ctx.save();ctx.globalAlpha=0.40;ctx.filter='blur(3px)';
+    ctx.drawImage(window._facShadow,sx-fw/2,sy-fh/2+fh*0.012,fw,fh);
+    ctx.filter='none';ctx.restore();
+    // KATMAN 2 - yön gölgesi: ışık soldan, gölge sağ-alta düşer
+    const ox=fw*0.04, oy=fh*0.05;
+    ctx.save();ctx.globalAlpha=0.28;ctx.drawImage(window._facShadow,sx-fw/2+ox,sy-fh/2+oy,fw,fh);ctx.restore();
   }
   if(facImg.complete){ctx.save();ctx.globalAlpha=1;ctx.globalCompositeOperation="source-over";ctx.drawImage(facImg,sx-fw/2,sy-fh/2,fw,fh);ctx.restore();}
   if(factory.selected){ctx.strokeStyle='#7fff9f';ctx.lineWidth=2;ctx.setLineDash([8,5]);ctx.strokeRect(sx-fw/2,sy-fh/2,fw,fh);ctx.setLineDash([]);
@@ -2276,24 +2260,19 @@ function draw(){
   const gy0=Math.max(0,Math.floor(cam.y/islandCellH)-1);
   const gx1=Math.min(ISLAND_GW,Math.ceil((cam.x+VW/z)/islandCellW)+1);
   const gy1=Math.min(ISLAND_GH,Math.ceil((cam.y+VH/z)/islandCellH)+1);
-  // KARE DİKİŞİNİ ÖNLE: pixel-perfect çizim + tile'ları 1px örtüştür
-  ctx.imageSmoothingEnabled=false;
-  const tw=Math.ceil(cellW)+2, th=Math.ceil(cellH)+2;
   for(let gy=gy0;gy<gy1;gy++){
     for(let gx=gx0;gx<gx1;gx++){
       const idx=D_GRID[gy*ISLAND_GW+gx];
       const img=tileImgs[idx];
       const [px,py]=w2s(gx*islandCellW,gy*islandCellH);
-      const dx=Math.floor(px), dy=Math.floor(py);
       if(img&&img.complete&&img.naturalWidth){
-        ctx.drawImage(img,dx,dy,tw,th);
+        ctx.drawImage(img,Math.floor(px),Math.floor(py),Math.ceil(cellW)+1,Math.ceil(cellH)+1);
       } else {
         ctx.fillStyle=idx===2?'#1a4a6a':'#5a7048';
-        ctx.fillRect(dx,dy,tw,th);
+        ctx.fillRect(Math.floor(px),Math.floor(py),Math.ceil(cellW)+1,Math.ceil(cellH)+1);
       }
     }
   }
-  ctx.imageSmoothingEnabled=true;
     drawGroundDetails();
   // SU dalga parlamasi (animasyon)
   drawIslandWater();
@@ -2305,9 +2284,8 @@ function draw(){
   // DÜŞMAN KIŞLASI
   {const [ex,ey]=w2s(enemyFactory.x,enemyFactory.y);const fw=FAC_W*FAC_SCALE*z,fh=FAC_H*FAC_SCALE*z;
    if(facImg.complete&&window._facShadow){
-     ctx.save();ctx.globalAlpha=0.32;ctx.fillStyle='#000';
-     ctx.beginPath();ctx.ellipse(ex+fw*0.04,ey+fh*0.34,fw*0.40,fh*0.16,0,0,Math.PI*2);ctx.fill();
-     ctx.restore();}
+     ctx.save();ctx.globalAlpha=0.40;ctx.filter='blur(3px)';ctx.drawImage(window._facShadow,ex-fw/2,ey-fh/2+fh*0.012,fw,fh);ctx.filter='none';ctx.restore();
+     const ox=fw*0.04,oy=fh*0.05;ctx.save();ctx.globalAlpha=0.28;ctx.drawImage(window._facShadow,ex-fw/2+ox,ey-fh/2+oy,fw,fh);ctx.restore();}
    if(facImg.complete){const tintedFac=getEnemyTinted(facImg)||facImg;ctx.save();ctx.globalAlpha=1;ctx.globalCompositeOperation="source-over";ctx.drawImage(tintedFac,ex-fw/2,ey-fh/2,fw,fh);ctx.restore();}}
   for(const wr of wrecks){const[x,y]=w2s(wr.x,wr.y);
     ctx.globalAlpha=Math.min(1,wr.fade)*0.3;ctx.fillStyle='#1a160f';ctx.beginPath();ctx.ellipse(x,y,HULL_W*SCALE*z*0.45,HULL_H*SCALE*z*0.4,0,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;
