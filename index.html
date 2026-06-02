@@ -959,20 +959,34 @@ function getEnemyTinted(img) {
     return c;
   } catch(e) { return null; }
 }
-// Görseli silüet (siyah dolu) olarak çiz - canvas filter ile
+// Görseli silüet (siyah dolu) olarak çiz - ÖNBELLEKLİ (filter her frame yerine bir kez)
+const _shadowCache = new Map();
+function getShadowSilhouette(img){
+  if(!img||!img.complete||!img.naturalWidth)return null;
+  let c=_shadowCache.get(img);
+  if(c)return c;
+  try{
+    c=document.createElement('canvas');
+    c.width=img.naturalWidth;c.height=img.naturalHeight;
+    const cc=c.getContext('2d');
+    cc.drawImage(img,0,0);
+    cc.globalCompositeOperation='source-in';
+    cc.fillStyle='#000';cc.fillRect(0,0,c.width,c.height);
+    _shadowCache.set(img,c);
+    return c;
+  }catch(e){return null;}
+}
 function drawShadowSprite(img,dx,dy,w,h,angle,centerOffsetX,centerOffsetY){
   if(!img||!img.complete)return;
+  const sil=getShadowSilhouette(img);
+  if(!sil)return;
   centerOffsetX=centerOffsetX||0;centerOffsetY=centerOffsetY||0;
   ctx.save();
   ctx.globalAlpha=SHADOW_ALPHA;
   ctx.translate(dx+SHADOW_DX,dy+SHADOW_DY);
   if(angle)ctx.rotate(angle);
-  // CSS filter ile siyah silüet: brightness 0 + saturation 0 (sadece alpha kalır)
-  ctx.filter='brightness(0)';
-  // gölge hafif küçük (yere oturmuş hissi, %92)
   const gs=0.92;
-  ctx.drawImage(img,(-w/2+centerOffsetX)*gs,(-h/2+centerOffsetY)*gs,w*gs,h*gs);
-  ctx.filter='none';
+  ctx.drawImage(sil,(-w/2+centerOffsetX)*gs,(-h/2+centerOffsetY)*gs,w*gs,h*gs);
   ctx.restore();
 }
 function smoke(x,y,big){if(smokes.length>250)return;smokes.push({x,y,r:big?6:3,life:1,vy:-0.5-Math.random()*0.5,vx:(Math.random()-0.5)*0.4,grow:big?0.9:0.4});}
@@ -1944,15 +1958,15 @@ function drawChinook(t){
   const offX=hw*0.25*flyAmount, offY=hh*0.30*flyAmount;
   ctx.translate(sx+offX,sy+offY);
   ctx.rotate(t.hullAngle+Math.PI/2);
-  ctx.filter='brightness(0)';
-  if(ch47Img.complete)ctx.drawImage(ch47Img,-hw/2,-hh/2,hw,hh);
+  const ch47Sil=getShadowSilhouette(ch47Img), rotorSil=getShadowSilhouette(ch47RotorImg);
+  if(ch47Sil)ctx.drawImage(ch47Sil,-hw/2,-hh/2,hw,hh);
   // Pervane gölgeleri (silüette de görünsün)
   const sFront=-hh*0.41, sBack=hh*0.28;
-  if(ch47RotorImg.complete){
-    ctx.save();ctx.translate(0,sFront);ctx.rotate(t.rotorAngle);ctx.drawImage(ch47RotorImg,-rw/2,-rh/2,rw,rh);ctx.restore();
-    ctx.save();ctx.translate(0,sBack);ctx.rotate(t.rotor2Angle);ctx.drawImage(ch47RotorImg,-rw/2,-rh/2,rw,rh);ctx.restore();
+  if(rotorSil){
+    ctx.save();ctx.translate(0,sFront);ctx.rotate(t.rotorAngle);ctx.drawImage(rotorSil,-rw/2,-rh/2,rw,rh);ctx.restore();
+    ctx.save();ctx.translate(0,sBack);ctx.rotate(t.rotor2Angle);ctx.drawImage(rotorSil,-rw/2,-rh/2,rw,rh);ctx.restore();
   }
-  ctx.filter='none';ctx.restore();
+  ctx.restore();
   // GÖVDE (havada)
   ctx.save();ctx.globalAlpha=alpha;ctx.translate(sx,sy-fly+bob);ctx.rotate(t.hullAngle+Math.PI/2);
   if(ch47Img.complete)ctx.drawImage(ch47Img,-hw/2,-hh/2,hw,hh);
@@ -1988,12 +2002,12 @@ function drawHeli(t){
   ctx.save();ctx.globalAlpha=alpha*0.5;
   ctx.translate(sx+hw*0.4,sy+hh*0.45); // havada olduğu için daha kayık
   ctx.rotate(t.hullAngle+Math.PI/2);
-  ctx.filter='brightness(0)';
-  if(heliImg.complete)ctx.drawImage(heliImg,-hw/2,-hh/2,hw,hh);
+  const heliSil=getShadowSilhouette(heliImg), rotorSilA=getShadowSilhouette(rotorImg);
+  if(heliSil)ctx.drawImage(heliSil,-hw/2,-hh/2,hw,hh);
   // Apache pervane gölgesi (göbekte, dönen)
   {const hubX=(HUB_X-0.5)*hw, hubY=(HUB_Y-0.5)*hh;
-   if(rotorImg.complete){ctx.save();ctx.translate(hubX,hubY);ctx.rotate(t.rotorAngle);ctx.drawImage(rotorImg,-rw/2,-rh/2,rw,rh);ctx.restore();}}
-  ctx.filter='none';ctx.restore();
+   if(rotorSilA){ctx.save();ctx.translate(hubX,hubY);ctx.rotate(t.rotorAngle);ctx.drawImage(rotorSilA,-rw/2,-rh/2,rw,rh);ctx.restore();}}
+  ctx.restore();
   // 2) GÖVDE (yukarıda)
   ctx.save();ctx.globalAlpha=alpha;ctx.translate(sx,sy-fly+bob);ctx.rotate(t.hullAngle+Math.PI/2);
   if(heliImg.complete)ctx.drawImage(heliImg,-hw/2,-hh/2,hw,hh);
@@ -2219,11 +2233,11 @@ function drawObstacles(){
     ctx.translate(sx,sy);
     if(o.rot)ctx.rotate(o.rot);
     if(o.flip)ctx.scale(-1,1);
-    // GÖLGE (zemine otursun) - su disinda
+    // GÖLGE (zemine otursun) - su disinda. UCUZ: filter blur yerine yarı saydam elips
     if(o.type!=='water'){
-      ctx.save();ctx.globalAlpha=0.32;ctx.filter='brightness(0) blur('+(2*z)+'px)';
-      ctx.drawImage(img,-dw/2+3*z,-dh/2+5*z,dw,dh);
-      ctx.filter='none';ctx.restore();
+      ctx.save();ctx.globalAlpha=0.28;ctx.fillStyle='#000';
+      ctx.beginPath();ctx.ellipse(2*z,dh*0.30,dw*0.42,dh*0.20,0,0,Math.PI*2);ctx.fill();
+      ctx.restore();
     }
     ctx.drawImage(img,-dw/2,-dh/2,dw,dh);
     ctx.restore();
@@ -2238,13 +2252,10 @@ function drawFactory(){
       const cc=c.getContext('2d');cc.drawImage(facImg,0,0);cc.globalCompositeOperation='source-in';cc.fillStyle='#000';cc.fillRect(0,0,c.width,c.height);
       window._facShadow=c;
     }
-    // KATMAN 1 - temas gölgesi: binanın tam dibine oturan koyu, dar silüet (zemine gömme hissi)
-    ctx.save();ctx.globalAlpha=0.40;ctx.filter='blur(3px)';
-    ctx.drawImage(window._facShadow,sx-fw/2,sy-fh/2+fh*0.012,fw,fh);
-    ctx.filter='none';ctx.restore();
-    // KATMAN 2 - yön gölgesi: ışık soldan, gölge sağ-alta düşer
-    const ox=fw*0.04, oy=fh*0.05;
-    ctx.save();ctx.globalAlpha=0.28;ctx.drawImage(window._facShadow,sx-fw/2+ox,sy-fh/2+oy,fw,fh);ctx.restore();
+    // UCUZ temas gölgesi: filter blur yerine yarı saydam elips (donma önler)
+    ctx.save();ctx.globalAlpha=0.34;ctx.fillStyle='#000';
+    ctx.beginPath();ctx.ellipse(sx+fw*0.04,sy+fh*0.34,fw*0.40,fh*0.16,0,0,Math.PI*2);ctx.fill();
+    ctx.restore();
   }
   if(facImg.complete){ctx.save();ctx.globalAlpha=1;ctx.globalCompositeOperation="source-over";ctx.drawImage(facImg,sx-fw/2,sy-fh/2,fw,fh);ctx.restore();}
   if(factory.selected){ctx.strokeStyle='#7fff9f';ctx.lineWidth=2;ctx.setLineDash([8,5]);ctx.strokeRect(sx-fw/2,sy-fh/2,fw,fh);ctx.setLineDash([]);
@@ -2265,19 +2276,24 @@ function draw(){
   const gy0=Math.max(0,Math.floor(cam.y/islandCellH)-1);
   const gx1=Math.min(ISLAND_GW,Math.ceil((cam.x+VW/z)/islandCellW)+1);
   const gy1=Math.min(ISLAND_GH,Math.ceil((cam.y+VH/z)/islandCellH)+1);
+  // KARE DİKİŞİNİ ÖNLE: pixel-perfect çizim + tile'ları 1px örtüştür
+  ctx.imageSmoothingEnabled=false;
+  const tw=Math.ceil(cellW)+2, th=Math.ceil(cellH)+2;
   for(let gy=gy0;gy<gy1;gy++){
     for(let gx=gx0;gx<gx1;gx++){
       const idx=D_GRID[gy*ISLAND_GW+gx];
       const img=tileImgs[idx];
       const [px,py]=w2s(gx*islandCellW,gy*islandCellH);
+      const dx=Math.floor(px), dy=Math.floor(py);
       if(img&&img.complete&&img.naturalWidth){
-        ctx.drawImage(img,Math.floor(px),Math.floor(py),Math.ceil(cellW)+1,Math.ceil(cellH)+1);
+        ctx.drawImage(img,dx,dy,tw,th);
       } else {
         ctx.fillStyle=idx===2?'#1a4a6a':'#5a7048';
-        ctx.fillRect(Math.floor(px),Math.floor(py),Math.ceil(cellW)+1,Math.ceil(cellH)+1);
+        ctx.fillRect(dx,dy,tw,th);
       }
     }
   }
+  ctx.imageSmoothingEnabled=true;
     drawGroundDetails();
   // SU dalga parlamasi (animasyon)
   drawIslandWater();
@@ -2289,8 +2305,9 @@ function draw(){
   // DÜŞMAN KIŞLASI
   {const [ex,ey]=w2s(enemyFactory.x,enemyFactory.y);const fw=FAC_W*FAC_SCALE*z,fh=FAC_H*FAC_SCALE*z;
    if(facImg.complete&&window._facShadow){
-     ctx.save();ctx.globalAlpha=0.40;ctx.filter='blur(3px)';ctx.drawImage(window._facShadow,ex-fw/2,ey-fh/2+fh*0.012,fw,fh);ctx.filter='none';ctx.restore();
-     const ox=fw*0.04,oy=fh*0.05;ctx.save();ctx.globalAlpha=0.28;ctx.drawImage(window._facShadow,ex-fw/2+ox,ey-fh/2+oy,fw,fh);ctx.restore();}
+     ctx.save();ctx.globalAlpha=0.32;ctx.fillStyle='#000';
+     ctx.beginPath();ctx.ellipse(ex+fw*0.04,ey+fh*0.34,fw*0.40,fh*0.16,0,0,Math.PI*2);ctx.fill();
+     ctx.restore();}
    if(facImg.complete){const tintedFac=getEnemyTinted(facImg)||facImg;ctx.save();ctx.globalAlpha=1;ctx.globalCompositeOperation="source-over";ctx.drawImage(tintedFac,ex-fw/2,ey-fh/2,fw,fh);ctx.restore();}}
   for(const wr of wrecks){const[x,y]=w2s(wr.x,wr.y);
     ctx.globalAlpha=Math.min(1,wr.fade)*0.3;ctx.fillStyle='#1a160f';ctx.beginPath();ctx.ellipse(x,y,HULL_W*SCALE*z*0.45,HULL_H*SCALE*z*0.4,0,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;
