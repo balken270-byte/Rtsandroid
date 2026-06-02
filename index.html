@@ -451,6 +451,7 @@ let _ffCache = new Map(); // hedef -> {field, ts} önbellek
 
 function ffCellWalkable(gx, gy) {
   // Kara birimi için hücre yürünebilir mi?
+  // FF_RES alanındaki tüm tile'lar kara olmalı
   for (let dy = 0; dy < FF_RES; dy++) {
     for (let dx = 0; dx < FF_RES; dx++) {
       const cx = gx * FF_RES + dx, cy = gy * FF_RES + dy;
@@ -459,6 +460,23 @@ function ffCellWalkable(gx, gy) {
     }
   }
   return true;
+}
+
+function ffCellCost(gx, gy) {
+  // Hücre maliyeti: su kenarına yakınsa daha pahalı (birimler kıyıdan uzak tutar)
+  // Dar geçitlerde yüksek maliyet = birim o geçiti tercih etmez ama gerekirse geçer
+  let cost = 10;
+  const MARGIN = 2; // kaç FF hücresi mesafe kontrol et
+  for (let dy = -MARGIN; dy <= MARGIN; dy++) {
+    for (let dx = -MARGIN; dx <= MARGIN; dx++) {
+      const nx = gx + dx, ny = gy + dy;
+      if (!ffCellWalkable(nx, ny)) {
+        const dist = Math.max(Math.abs(dx), Math.abs(dy)); // Chebyshev mesafesi
+        cost = Math.max(cost, Math.round(10 + (MARGIN - dist + 1) * 8));
+      }
+    }
+  }
+  return cost;
 }
 
 function buildFlowField(tx, ty) {
@@ -516,7 +534,8 @@ function buildFlowField(tx, ty) {
       if (nx < 0 || nx >= FF_W || ny < 0 || ny >= FF_H) continue;
       if (!ffCellWalkable(nx, ny)) continue;
       const idx = ny * FF_W + nx;
-      const nd = cd + (dirs[d][0] !== 0 && dirs[d][1] !== 0 ? 14 : 10);
+      const cellCost = ffCellCost(nx, ny);
+      const nd = cd + (dirs[d][0] !== 0 && dirs[d][1] !== 0 ? Math.round(cellCost*1.4) : cellCost);
       if (nd < dist[idx]) {
         dist[idx] = nd;
         field[idx] = (d + 4) % 8; // ters yön = hedefe giden yön
@@ -1189,11 +1208,22 @@ function update(){
       // Throttle: kendi frame'i değilse önceki nav yönünü kullan
       const shouldUpdate = (time % 3) === (t._navId % 3);
       // Hedef değiştiyse nav cache'i sıfırla
-      if (t._lastTx !== t.tx || t._lastTy !== t.ty) { t._navDir = null; t._lastTx = t.tx; t._lastTy = t.ty; }
-      if (shouldUpdate || !t._navDir) {
+      if (t._lastTx !== t.tx || t._lastTy !== t.ty) { t._navDir = null; t._lastTx = t.tx; t._lastTy = t.ty; t._stuckCount=0; }
+      // Takılma tespiti: son 20 frame az hareket ettiyse nav yenile
+      if(!t._prevX){t._prevX=t.x;t._prevY=t.y;t._stuckCount=0;}
+      if(time%20===0){
+        const moved=Math.hypot(t.x-t._prevX,t.y-t._prevY);
+        t._stuckCount = (moved<2&&t.hasOrder) ? (t._stuckCount||0)+1 : 0;
+        t._prevX=t.x; t._prevY=t.y;
+      }
+      const isStuck = t._stuckCount > 2;
+      if (shouldUpdate || !t._navDir || isStuck) {
         // Flow-field tabanlı navigasyon (su engeli varsa dolaş)
-        const nav=getNavDir(t,t.tx,t.ty);
+        // Takılmışsa hedefte küçük rastgele sapma (dar geçitlerden çıkmak için)
+        const jitter = isStuck ? (Math.random()-0.5)*D_TW*2 : 0;
+        const nav=getNavDir(t, t.tx+jitter, t.ty+jitter);
         t._navDir = nav;
+        if(isStuck) t._stuckCount = Math.max(0, (t._stuckCount||0)-1); // yavaş sıfırla
       }
       const nav = t._navDir;
       if(rawDd>4){
@@ -1222,14 +1252,20 @@ function update(){
           ax+=(odx/od)*force; ay+=(ody/od)*force;
         }
       }
-      // === KIYI GUVENLİ MESAFE - su kenarından uzak tut ===
-      const coastMargin = D_TW * 2.5;
-      const coastDirs = [[1,0],[-1,0],[0,1],[0,-1],[0.7,0.7],[-0.7,0.7],[0.7,-0.7],[-0.7,-0.7]];
-      for(const [cdx,cdy] of coastDirs){
-        const cx=t.x+cdx*coastMargin, cy=t.y+cdy*coastMargin;
+      // === KIYI GÜVENLİ MESAFE - sadece çok yakınsa ve dar geçit yoksa hafif it ===
+      // flowfield zaten su kenarından uzak tutar; bu sadece acil önlem
+      const coastImmediate = D_TW * 1.2; // çok yakın = 1 tile
+      const coastDirsImm = [[1,0],[-1,0],[0,1],[0,-1]];
+      let coastBlocked = 0;
+      for(const [cdx,cdy] of coastDirsImm){
+        if(isWater(t.x+cdx*coastImmediate, t.y+cdy*coastImmediate)) coastBlocked++;
+      }
+      // Dar geçit: 2+ yönde su varsa birim sıkışmış - kuvveti düşür (sallanma önlenir)
+      const coastForce = coastBlocked >= 2 ? 0.15 : 0.35;
+      for(const [cdx,cdy] of coastDirsImm){
+        const cx=t.x+cdx*coastImmediate, cy=t.y+cdy*coastImmediate;
         if(isWater(cx,cy)){
-          const force=0.6;
-          ax-=cdx*force; ay-=cdy*force;
+          ax-=cdx*coastForce; ay-=cdy*coastForce;
         }
       }
       if(ax!==0||ay!==0){
@@ -1491,8 +1527,13 @@ function update(){
       const bothChinook=aC&&bC;
       // chinook tank/heliyle çarpışmaz (havada, farklı yükseklik)
       if(oneChinook && !bothChinook && !bothHeli){if(!(aC&&bC))continue;} // chinook sadece chinook ile
-      const minD=bothChinook?STATS.radius*5.5 : bothHeli?STATS.radius*4.2 : (aS&&bS)?STATS.radius*0.9 : (aS||bS)?STATS.radius*1.2 : STATS.radius*2;
-      if(d<minD&&d>0.1){const push=(minD-d)/2*(bothHeli?1.0:1.2),nx=dx/d,ny=dy/d;a.x-=nx*push;a.y-=ny*push;b.x+=nx*push;b.y+=ny*push;}}}
+      const minD=bothChinook?STATS.radius*5.5 : bothHeli?STATS.radius*4.2 : (aS&&bS)?STATS.radius*0.9 : (aS||bS)?STATS.radius*1.2 : STATS.radius*1.9;
+      if(d<minD&&d>0.1){
+        const push=(minD-d)*(bothHeli?1.0:1.1), nx=dx/d, ny=dy/d;
+        const mA=a.unitType==='soldier'?500:3000, mB=b.unitType==='soldier'?500:3000, totalM=mA+mB;
+        a.x-=nx*(push*mB/totalM); a.y-=ny*(push*mB/totalM);
+        b.x+=nx*(push*mA/totalM); b.y+=ny*(push*mA/totalM);
+      }}}
   for(const t of tanks){t.x=Math.max(20,Math.min(MAP_W-20,t.x));t.y=Math.max(20,Math.min(MAP_H-20,t.y));}
   // Kışla çarpışması
   for(const t of tanks){
