@@ -1188,11 +1188,16 @@ function update(){
           // Hedef öldüyse: hasOrder sıfırla, yeni dalga bekle
           if(!tg.alive){ t.hasOrder=false; t._rallyTimer=0; }
         } else {
-          // Düşman yok: factory önüne dön
-          t.hasOrder=false; t._rallyTimer=0;
-          t.tx=enemyFactory.x+(Math.random()-0.5)*120;
-          t.ty=enemyFactory.y-enemyFactory.h/2-80;
-          t.homeX=t.tx; t.homeY=t.ty;
+          // Düşman yok VEYA hedef kayboldu: cooldown ile factory önüne dön
+          // Her frame reset yaparsa birim titrer → 120 frame bekleme
+          t._noTargetTimer=(t._noTargetTimer||0)+1;
+          if(t._noTargetTimer>120){
+            t.hasOrder=false; t._rallyTimer=0; t._noTargetTimer=0;
+            // Rastgele değil, mevcut pozisyona yakın sabit nokta
+            t.tx=enemyFactory.x+(Math.random()-0.5)*160;
+            t.ty=enemyFactory.y-enemyFactory.h/2-80;
+            t.homeX=t.tx; t.homeY=t.ty;
+          }
         }
       } else {
         // BEKLEMEDE: savunma modu
@@ -1266,8 +1271,9 @@ function update(){
       const isStuck = t._stuckCount > 2;
       if (shouldUpdate || !t._navDir || isStuck) {
         // Flow-field tabanlı navigasyon (su engeli varsa dolaş)
-        // Takılmışsa hedefte küçük rastgele sapma (dar geçitlerden çıkmak için)
-        const jitter = isStuck ? (Math.random()-0.5)*D_TW*2 : 0;
+        // Takılmışsa küçük sapma (dar geçitlerden çıkmak için)
+        // D_TW*0.8 = ~16px — çok büyük jitter yanlış yöne götürür
+        const jitter = isStuck ? (Math.random()-0.5)*D_TW*0.8 : 0;
         const nav=getNavDir(t, t.tx+jitter, t.ty+jitter);
         t._navDir = nav;
         if(isStuck) t._stuckCount = Math.max(0, (t._stuckCount||0)-1); // yavaş sıfırla
@@ -1288,36 +1294,42 @@ function update(){
           ax+=(odx/od)*force; ay+=(ody/od)*force;
         }
       }
-      // === BİRİM AYIRMA (Separation Steering) - %50 azaltıldı ===
-      const sepRadius = STATS.radius * (t.unitType==='soldier'?1.1:1.6);
-      for(const other of tanks){
-        if(other===t||!other.alive)continue;
-        if(other.unitType==='heli'||other.unitType==='chinook')continue;
-        const odx=t.x-other.x, ody=t.y-other.y, od=Math.hypot(odx,ody);
-        if(od<sepRadius && od>0.1){
-          const force=Math.pow((sepRadius-od)/sepRadius,2)*0.7;
-          ax+=(odx/od)*force; ay+=(ody/od)*force;
+      // === BİRİM AYIRMA: sadece gerçek çakışmada, hafif kuvvet ===
+      // Her frame çalıştırmak titremeye yol açıyor → yavaşlatıldı
+      if(time % 2 === 0){ // Her 2 frame'de bir
+        const sepRadius = STATS.radius * (t.unitType==='soldier'?1.0:1.4);
+        for(const other of tanks){
+          if(other===t||!other.alive)continue;
+          if(other.unitType==='heli'||other.unitType==='chinook')continue;
+          const odx=t.x-other.x, ody=t.y-other.y, od=Math.hypot(odx,ody);
+          if(od<sepRadius && od>0.1){
+            // Doğrusal kuvvet (kararlı), karesel değil (sallanmaya yol açar)
+            const force=(sepRadius-od)/sepRadius*0.45;
+            ax+=(odx/od)*force; ay+=(ody/od)*force;
+          }
         }
       }
-      // === KIYI GÜVENLİ MESAFE - sadece çok yakınsa ve dar geçit yoksa hafif it ===
-      // flowfield zaten su kenarından uzak tutar; bu sadece acil önlem
-      const coastImmediate = D_TW * 1.2; // çok yakın = 1 tile
+      // === KIYI GÜVENLİ MESAFE: sadece gerçekten su kenarındaysa ===
+      // Flow field + ffCellCost zaten su kenarından kaçındırıyor
+      // Burada sadece 1 tile mesafedeyse acil düzeltme yapılır
+      const coastImmediate = D_TW * 1.0;
       const coastDirsImm = [[1,0],[-1,0],[0,1],[0,-1]];
       let coastBlocked = 0;
       for(const [cdx,cdy] of coastDirsImm){
         if(isWater(t.x+cdx*coastImmediate, t.y+cdy*coastImmediate)) coastBlocked++;
       }
-      // Dar geçit: 2+ yönde su varsa birim sıkışmış - kuvveti düşür (sallanma önlenir)
-      const coastForce = coastBlocked >= 2 ? 0.15 : 0.35;
-      for(const [cdx,cdy] of coastDirsImm){
-        const cx=t.x+cdx*coastImmediate, cy=t.y+cdy*coastImmediate;
-        if(isWater(cx,cy)){
-          ax-=cdx*coastForce; ay-=cdy*coastForce;
+      if(coastBlocked>0){
+        // Dar geçit (2+ yön su) → kuvveti çok düşür, titreme önlenir
+        const coastForce = coastBlocked >= 3 ? 0.0 : coastBlocked === 2 ? 0.08 : 0.2;
+        for(const [cdx,cdy] of coastDirsImm){
+          const cx=t.x+cdx*coastImmediate, cy=t.y+cdy*coastImmediate;
+          if(isWater(cx,cy)){ax-=cdx*coastForce; ay-=cdy*coastForce;}
         }
       }
       if(ax!==0||ay!==0){
         const am=Math.hypot(ax,ay)||1;
-        navDx+=ax/am*0.6; navDy+=ay/am*0.6;
+        // Blend faktörü düşürüldü: 0.6→0.35 (kararlılık artar)
+        navDx+=ax/am*0.35; navDy+=ay/am*0.35;
         const nm=Math.hypot(navDx,navDy)||1;
         navDx/=nm; navDy/=nm;
       }
@@ -1409,7 +1421,10 @@ function update(){
         if(Math.abs(diff)<0.03){t.hullAngle=targetH;t.hullTurnVel=0;}else t.hullAngle+=t.hullTurnVel;
         if(Math.abs(diff)<0.22){t.x+=Math.cos(t.hullAngle)*t.speed;t.y+=Math.sin(t.hullAngle)*t.speed;t.trackPhase+=0.25;if(time%5===0)tracks.push({x:t.x,y:t.y,a:t.hullAngle,life:1});}
       }else{
-        t.hullTurnVel*=0.7;t.hasOrder=false;
+        t.hullTurnVel*=0.7;
+        // Gerçek hedefe mesafeye göre hasOrder sıfırla (nav sapması varsa erken sıfırlanmaz)
+        const realDd=Math.hypot(t.tx-t.x,t.ty-t.y);
+        if(realDd<t.speed+4) t.hasOrder=false;
         if(t.faceDir!==undefined&&(!tg||td>t.range)){const fd=angleDiff(t.faceDir,t.hullAngle);if(Math.abs(fd)>0.02)t.hullAngle+=Math.sign(fd)*Math.min(Math.abs(fd),0.06);}
       }
     } else if(t.unitType==='stryker'){
@@ -1422,7 +1437,9 @@ function update(){
         if(Math.abs(diff)<0.03){t.hullAngle=targetH;t.hullTurnVel=0;}else t.hullAngle+=t.hullTurnVel;
         if(Math.abs(diff)<0.25){t.x+=Math.cos(t.hullAngle)*t.speed;t.y+=Math.sin(t.hullAngle)*t.speed;t.trackPhase+=0.3;if(time%6===0)tracks.push({x:t.x,y:t.y,a:t.hullAngle,life:1});}
       }else{
-        t.hullTurnVel*=0.7;t.hasOrder=false;
+        t.hullTurnVel*=0.7;
+        const realDd=Math.hypot(t.tx-t.x,t.ty-t.y);
+        if(realDd<t.speed+4) t.hasOrder=false;
         if(t.faceDir!==undefined&&(!tg||td>t.range)){const fd=angleDiff(t.faceDir,t.hullAngle);if(Math.abs(fd)>0.02)t.hullAngle+=Math.sign(fd)*Math.min(Math.abs(fd),0.06);}
       }
     } else {
@@ -1434,7 +1451,9 @@ function update(){
         if(Math.abs(diff)<0.03){t.hullAngle=targetH;t.hullTurnVel=0;}else t.hullAngle+=t.hullTurnVel;
         if(Math.abs(diff)<STATS.alignTolerance){t.x+=Math.cos(t.hullAngle)*STATS.moveSpeed;t.y+=Math.sin(t.hullAngle)*STATS.moveSpeed;t.trackPhase+=0.25;if(time%5===0)tracks.push({x:t.x,y:t.y,a:t.hullAngle,life:1});}
       }else{
-        t.hullTurnVel*=0.7;t.hasOrder=false;
+        t.hullTurnVel*=0.7;
+        const realDd=Math.hypot(t.tx-t.x,t.ty-t.y);
+        if(realDd<STATS.moveSpeed+4) t.hasOrder=false;
         // durunca belirlenen yöne dön (düşman yoksa)
         if(t.faceDir!==undefined&&(!tg||td>STATS.range)){const fd=angleDiff(t.faceDir,t.hullAngle);if(Math.abs(fd)>0.02)t.hullAngle+=Math.sign(fd)*Math.min(Math.abs(fd),STATS.maxTurn);}
       }
@@ -1574,9 +1593,14 @@ function update(){
       const bothChinook=aC&&bC;
       // chinook tank/heliyle çarpışmaz (havada, farklı yükseklik)
       if(oneChinook && !bothChinook && !bothHeli){if(!(aC&&bC))continue;} // chinook sadece chinook ile
-      const minD=bothChinook?STATS.radius*5.5 : bothHeli?STATS.radius*4.2 : (aS&&bS)?STATS.radius*0.9 : (aS||bS)?STATS.radius*1.2 : STATS.radius*1.9;
+      const minD=bothChinook?STATS.radius*5.5 : bothHeli?STATS.radius*4.2 : (aS&&bS)?STATS.radius*0.85 : (aS||bS)?STATS.radius*1.1 : STATS.radius*1.7;
       if(d<minD&&d>0.1){
-        const push=(minD-d)*(bothHeli?1.0:1.1), nx=dx/d, ny=dy/d;
+        // Push çok hafif: separation steering zaten dağıtıyor
+        // Sadece tam üst üste gelince güçlü it (fiziksel çakışma önleme)
+        const overlap = minD - d;
+        const pushStrength = overlap < minD*0.3 ? 0.4 : 0.7; // az çakışma=hafif, tam çakışma=güçlü
+        const push = overlap * pushStrength;
+        const nx=dx/d, ny=dy/d;
         const mA=a.unitType==='soldier'?500:3000, mB=b.unitType==='soldier'?500:3000, totalM=mA+mB;
         a.x-=nx*(push*mB/totalM); a.y-=ny*(push*mB/totalM);
         b.x+=nx*(push*mA/totalM); b.y+=ny*(push*mA/totalM);
