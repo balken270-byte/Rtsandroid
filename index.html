@@ -558,27 +558,19 @@ function getNavDir(unit, targetX, targetY) {
   const wx = unit.x, wy = unit.y;
   const rawDd = Math.hypot(targetX - wx, targetY - wy);
 
-  // RWR moveSlidingDir mantığı: birim yol boyunca dik eksende sabit ofsetle ilerler
-  // Lane offset hedefe değil, BİRİMİN pozisyonuna uygulanır
-  // Böylece tüm rota boyunca farklı şerit korunur
+  // Hedef ofseti: her birim hedefe hafif farklı noktaya gider → dağılma
+  // Bilinear interpolation zaten rota boyunca farklılık sağlıyor
+  // Burada sadece varış noktasını dağıtıyoruz
   let effTx = targetX, effTy = targetY;
   if(unit.laneOx !== undefined && rawDd > 20){
     const ndx = (targetX-wx)/rawDd, ndy = (targetY-wy)/rawDd;
-    const perpX = -ndy, perpY = ndx; // harekete dik yön = şerit yönü
-    // Hedefe yaklaştıkça şerit azalır (son 3 tile'da eriyip hedefe gir)
-    const fadeStart = D_TW * 3;
+    const perpX = -ndy, perpY = ndx;
+    const fadeStart = D_TW * 4;
     const laneScale = rawDd > fadeStart ? 1.0 : rawDd / fadeStart;
     const lx = perpX * unit.laneOx * laneScale;
     const ly = perpY * unit.laneOx * laneScale;
-    // Ofsetli ara nokta: birimden 4 tile ileride, şerit yönünde
-    const checkX = wx + ndx * D_TW * 4 + lx;
-    const checkY = wy + ndy * D_TW * 4 + ly;
-    if(!isWater(checkX, checkY)){
-      // Şerit geçerli: hedefi de ofsetle, tutarlı rota için
-      effTx = targetX + lx;
-      effTy = targetY + ly;
-      if(isWater(effTx, effTy)){ effTx = targetX; effTy = targetY; }
-    }
+    const cx = targetX + lx, cy = targetY + ly;
+    if(!isWater(cx, cy)){ effTx = cx; effTy = cy; }
   }
   targetX = effTx; targetY = effTy;
 
@@ -606,14 +598,48 @@ function getNavDir(unit, targetX, targetY) {
   if (cgx < 0 || cgx >= FF_W || cgy < 0 || cgy >= FF_H) {
     return { x: dx / dd, y: dy / dd };
   }
-  const dir = ff.field[cgy * FF_W + cgx];
-  if (dir < 0) return { x: dx / dd, y: dy / dd }; // hedef hücresindeyiz
-  const dirs = [[1,0],[1,-1],[0,-1],[-1,-1],[-1,0],[-1,1],[0,1],[1,1]];
-  const [fdx, fdy] = dirs[dir];
-  // Uzakta flow field ağır (engel etrafı dolaş), yakında hedef yönü ağır (titreme yok)
+  // BİLİNEAR INTERPOLATION: 4 komşu hücreden ağırlıklı yön al
+  // Bu sayede birim konumu biraz farklıysa farklı yön alır → doğal dağılma
+  const dirs8 = [[1,0],[1,-1],[0,-1],[-1,-1],[-1,0],[-1,1],[0,1],[1,1]];
+  
+  function ffDirVec(gx, gy) {
+    if(gx<0||gx>=FF_W||gy<0||gy>=FF_H) return null;
+    const d = ff.field[gy * FF_W + gx];
+    if(d < 0) return {x: dx/dd, y: dy/dd}; // hedef
+    return {x: dirs8[d][0], y: dirs8[d][1]};
+  }
+
+  // Birim'in hücre içi oransal pozisyonu (0-1)
+  const cellX = (wx / (D_TW * FF_RES)) - cgx; // 0-1
+  const cellY = (wy / (D_TW * FF_RES)) - cgy;
+
+  // 4 komşu hücre
+  const v00 = ffDirVec(cgx,   cgy);
+  const v10 = ffDirVec(cgx+1, cgy);
+  const v01 = ffDirVec(cgx,   cgy+1);
+  const v11 = ffDirVec(cgx+1, cgy+1);
+
+  // Geçerli hücreleri filtrele
+  const valid = [v00,v10,v01,v11].filter(Boolean);
+  if(valid.length === 0) return { x: dx/dd, y: dy/dd };
+
+  // Bilinear interpolation
+  let fx = 0, fy = 0;
+  if(v00 && v10 && v01 && v11) {
+    const top    = {x: v00.x*(1-cellX) + v10.x*cellX, y: v00.y*(1-cellX) + v10.y*cellX};
+    const bottom = {x: v01.x*(1-cellX) + v11.x*cellX, y: v01.y*(1-cellX) + v11.y*cellX};
+    fx = top.x*(1-cellY) + bottom.x*cellY;
+    fy = top.y*(1-cellY) + bottom.y*cellY;
+  } else {
+    // Eksik hücre varsa basit ortalama
+    for(const v of valid){ fx+=v.x; fy+=v.y; }
+    fx/=valid.length; fy/=valid.length;
+  }
+
+  // Uzakta flow field ağır, yakında hedef yönü ağır
   const blendFactor = Math.min(1, dd / (D_TW * 6));
-  const bx = fdx * blendFactor + (dx / dd) * (1 - blendFactor);
-  const by = fdy * blendFactor + (dy / dd) * (1 - blendFactor);
+  const bx = fx * blendFactor + (dx / dd) * (1 - blendFactor);
+  const by = fy * blendFactor + (dy / dd) * (1 - blendFactor);
   const blen = Math.hypot(bx, by) || 1;
   return { x: bx / blen, y: by / blen };
 }
@@ -1352,8 +1378,11 @@ function update(){
       }
       if(ax!==0||ay!==0){
         const am=Math.hypot(ax,ay)||1;
-        // Blend faktörü düşürüldü: 0.6→0.35 (kararlılık artar)
-        navDx+=ax/am*0.35; navDy+=ay/am*0.35;
+        // Dönüş sırasında separation kuvvetini azalt (kayma önlenir)
+        const turnDiff = t.hullAngle !== undefined ?
+          Math.abs(Math.atan2(navDy,navDx) - t.hullAngle) : 0;
+        const turnFactor = turnDiff > 0.3 ? 0.15 : 0.35; // dönüşteyken çok hafif
+        navDx+=ax/am*turnFactor; navDy+=ay/am*turnFactor;
         const nm=Math.hypot(navDx,navDy)||1;
         navDx/=nm; navDy/=nm;
       }
