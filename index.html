@@ -19,7 +19,7 @@
   #pauseOverlay.show { display:flex; }
   #pauseOverlay h1 { font-size:28px; }
   #pauseOverlay button { background:#2c6fa3; color:#fff; border:none; border-radius:12px; padding:14px 32px; font-size:18px; }
-</style></head><body><div id="hud">RTS <b>v4.5</b> — Denge güncellemesi · <b>build 14</b></div>
+</style></head><body><div id="hud">RTS <b>v4.5</b> — Denge güncellemesi · <b>build 15</b></div>
 <div id="build">
   <button id="bTank" class="active">🔧 Tank<br>100</button>
   <button id="bHeli">🚁 Heli<br>150</button>
@@ -40,7 +40,7 @@
 const HULL="assets/images/tank/hull.png";
 const TURRET="assets/images/tank/turret.png";
 const FACTORY="assets/images/building/factory.png";
-const TPX=0.495;const TPY=0.670;const SOCKET_Y=0.634;const HULL_W=351;const HULL_H=645;const TUR_W=287;const TUR_H=697;const FAC_W=1202;const FAC_H=820;
+const TPX=0.495;const TPY=0.670;const SOCKET_Y=0.634;const HULL_W=351;const HULL_H=645;const TUR_W=287;const TUR_H=697;const FAC_W=1073;const FAC_H=820;
 const GROUND="assets/images/building/ground.png";
 const EHULL="assets/images/enemy/ehull.png";
 const ETURRET="assets/images/enemy/eturret.png";
@@ -2273,25 +2273,13 @@ function drawFactory(){
       const cc=c.getContext('2d');cc.drawImage(facImg,0,0);cc.globalCompositeOperation='source-in';cc.fillStyle='#000';cc.fillRect(0,0,c.width,c.height);
       window._facShadow=c;
     }
-    // KATMAN 0 - GENİŞ TEMAS HALKASI: binanin tabanina yayilan yumusak elips golge.
-    // Zemine "oturma"/kaynasma hissi verir (RTS standardi).
-    const groundY=sy+fh*0.36; // binanin taban hizasi
-    ctx.save();
-    ctx.globalAlpha=0.30;
-    ctx.filter='blur('+Math.max(4,8*z)+'px)';
-    ctx.fillStyle='#000';
-    ctx.beginPath();
-    ctx.ellipse(sx, groundY, fw*0.46, fh*0.20, 0, 0, Math.PI*2);
-    ctx.fill();
-    ctx.filter='none';
-    ctx.restore();
-    // KATMAN 1 - temas gölgesi: binanın tam dibine oturan koyu, yumusak silüet
-    ctx.save();ctx.globalAlpha=0.38;ctx.filter='blur('+Math.max(2,4*z)+'px)';
-    ctx.drawImage(window._facShadow,sx-fw/2,sy-fh/2+fh*0.02,fw,fh);
+    // KATMAN 1 - temas gölgesi: binanın tam dibine oturan koyu, dar silüet (zemine gömme hissi)
+    ctx.save();ctx.globalAlpha=0.40;ctx.filter='blur(3px)';
+    ctx.drawImage(window._facShadow,sx-fw/2,sy-fh/2+fh*0.012,fw,fh);
     ctx.filter='none';ctx.restore();
     // KATMAN 2 - yön gölgesi: ışık soldan, gölge sağ-alta düşer
     const ox=fw*0.04, oy=fh*0.05;
-    ctx.save();ctx.globalAlpha=0.22;ctx.drawImage(window._facShadow,sx-fw/2+ox,sy-fh/2+oy,fw,fh);ctx.restore();
+    ctx.save();ctx.globalAlpha=0.28;ctx.drawImage(window._facShadow,sx-fw/2+ox,sy-fh/2+oy,fw,fh);ctx.restore();
   }
   if(facImg.complete){ctx.save();ctx.globalAlpha=1;ctx.globalCompositeOperation="source-over";ctx.drawImage(facImg,sx-fw/2,sy-fh/2,fw,fh);ctx.restore();}
   if(factory.selected){ctx.strokeStyle='#7fff9f';ctx.lineWidth=2;ctx.setLineDash([8,5]);ctx.strokeRect(sx-fw/2,sy-fh/2,fw,fh);ctx.setLineDash([]);
@@ -2356,11 +2344,8 @@ function draw(){
   // DÜŞMAN KIŞLASI
   {const [ex,ey]=w2s(enemyFactory.x,enemyFactory.y);const fw=FAC_W*FAC_SCALE*z,fh=FAC_H*FAC_SCALE*z;
    if(facImg.complete&&window._facShadow){
-     // genis temas halkasi (zemine kaynasma)
-     const gY=ey+fh*0.36;
-     ctx.save();ctx.globalAlpha=0.30;ctx.filter='blur('+Math.max(4,8*z)+'px)';ctx.fillStyle='#000';ctx.beginPath();ctx.ellipse(ex,gY,fw*0.46,fh*0.20,0,0,Math.PI*2);ctx.fill();ctx.filter='none';ctx.restore();
-     ctx.save();ctx.globalAlpha=0.38;ctx.filter='blur('+Math.max(2,4*z)+'px)';ctx.drawImage(window._facShadow,ex-fw/2,ey-fh/2+fh*0.02,fw,fh);ctx.filter='none';ctx.restore();
-     const ox=fw*0.04,oy=fh*0.05;ctx.save();ctx.globalAlpha=0.22;ctx.drawImage(window._facShadow,ex-fw/2+ox,ey-fh/2+oy,fw,fh);ctx.restore();}
+     ctx.save();ctx.globalAlpha=0.40;ctx.filter='blur(3px)';ctx.drawImage(window._facShadow,ex-fw/2,ey-fh/2+fh*0.012,fw,fh);ctx.filter='none';ctx.restore();
+     const ox=fw*0.04,oy=fh*0.05;ctx.save();ctx.globalAlpha=0.28;ctx.drawImage(window._facShadow,ex-fw/2+ox,ey-fh/2+oy,fw,fh);ctx.restore();}
    if(facImg.complete){const tintedFac=getEnemyTinted(facImg)||facImg;ctx.save();ctx.globalAlpha=1;ctx.globalCompositeOperation="source-over";ctx.drawImage(tintedFac,ex-fw/2,ey-fh/2,fw,fh);ctx.restore();}}
   for(const wr of wrecks){const[x,y]=w2s(wr.x,wr.y);
     ctx.globalAlpha=Math.min(1,wr.fade)*0.3;ctx.fillStyle='#1a160f';ctx.beginPath();ctx.ellipse(x,y,HULL_W*SCALE*z*0.45,HULL_H*SCALE*z*0.4,0,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;
