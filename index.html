@@ -19,7 +19,7 @@
   #pauseOverlay.show { display:flex; }
   #pauseOverlay h1 { font-size:28px; }
   #pauseOverlay button { background:#2c6fa3; color:#fff; border:none; border-radius:12px; padding:14px 32px; font-size:18px; }
-</style></head><body><div id="hud">RTS <b>v4.5</b> — Denge güncellemesi · <b>build 10</b></div>
+</style></head><body><div id="hud">RTS <b>v4.5</b> — Denge güncellemesi · <b>build 11</b></div>
 <div id="build">
   <button id="bTank" class="active">🔧 Tank<br>100</button>
   <button id="bHeli">🚁 Heli<br>150</button>
@@ -2250,12 +2250,11 @@ function draw(){
       const idx=D_GRID[gy*ISLAND_GW+gx];
       const img=tileImgs[idx];
       const [px,py]=w2s(gx*islandCellW,gy*islandCellH);
-      // Karo kenarlarini bir sonraki karonun baslangicina hizala:
-      // konum floor, genislik = (sonraki floor - bu floor). Boylece kaydirirken
-      // komsu karolar arasinda 1px bosluk acilip titremesi olmaz.
+      // Konum floor + kenari bir sonraki karonun floor'una hizala (kaydirma kararliligi),
+      // sonra sag/alt kenara 1px bindirme ekle (dikis cizgisini kapatir).
       const px0=Math.floor(px), py0=Math.floor(py);
       const px1=Math.floor(px+cellW), py1=Math.floor(py+cellH);
-      const dw=px1-px0, dh=py1-py0;
+      const dw=(px1-px0)+1, dh=(py1-py0)+1;
       if(img&&img.complete&&img.naturalWidth){
         ctx.drawImage(img,px0,py0,dw,dh);
       } else {
