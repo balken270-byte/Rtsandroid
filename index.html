@@ -19,7 +19,7 @@
   #pauseOverlay.show { display:flex; }
   #pauseOverlay h1 { font-size:28px; }
   #pauseOverlay button { background:#2c6fa3; color:#fff; border:none; border-radius:12px; padding:14px 32px; font-size:18px; }
-</style></head><body><div id="hud">RTS <b>v4.5</b> — Denge güncellemesi · <b>build 11</b></div>
+</style></head><body><div id="hud">RTS <b>v4.5</b> — Denge güncellemesi · <b>build 12</b></div>
 <div id="build">
   <button id="bTank" class="active">🔧 Tank<br>100</button>
   <button id="bHeli">🚁 Heli<br>150</button>
@@ -668,6 +668,61 @@ const tileImgs=D.tiles.map(src=>{const i=new Image();i.src=src;return i;});
 let tilesLoaded=0;
 tileImgs.forEach(i=>i.onload=()=>{tilesLoaded++;});
 const islandCellW=D_TW, islandCellH=D_TW;
+
+// === CHUNK BAZLI ZEMİN ÖN-RENDER (yumusak, karesiz, performansli) ===
+// Harita 30x30 karoluk parcalara bolunur. Her parca 3x cozunurlukte bir kez
+// cizilir (dolgu karolari rastgele dondurulur = tekrar deseni kirilir; uzerine
+// organik noise = karo sinirlari gizlenir). Ekranda sadece gorunen parcalar
+// cizilir, hesap bir kez yapilir.
+const GTILE_ROT=new Uint8Array(ISLAND_GW*ISLAND_GH);
+for(let i=0;i<GTILE_ROT.length;i++)GTILE_ROT[i]=((i*2654435761)>>>0)&3;
+let _groundNoise=null;
+function _buildGroundNoise(){
+  const S=256;const c=document.createElement('canvas');c.width=S;c.height=S;
+  const nx=c.getContext('2d');const id=nx.createImageData(S,S);
+  for(let i=0;i<S*S;i++){const v=180+(Math.random()*75|0);id.data[i*4]=v;id.data[i*4+1]=v;id.data[i*4+2]=v;id.data[i*4+3]=255;}
+  nx.putImageData(id,0,0);_groundNoise=c;
+}
+const GROUND_CHUNK=30, GROUND_SUP=3;     // 30 karo/parca, 3x super-sampling
+const _groundChunks=new Map();           // "cx,cy" -> canvas
+function _buildGroundChunk(cx,cy){
+  if(!_groundNoise)_buildGroundNoise();
+  const px=GROUND_CHUNK*D_TW*GROUND_SUP;
+  const cv=document.createElement('canvas');cv.width=px;cv.height=px;
+  const b=cv.getContext('2d');b.imageSmoothingEnabled=false;
+  for(let ly=0;ly<GROUND_CHUNK;ly++)for(let lx=0;lx<GROUND_CHUNK;lx++){
+    const gx=cx*GROUND_CHUNK+lx, gy=cy*GROUND_CHUNK+ly;
+    if(gx>=ISLAND_GW||gy>=ISLAND_GH)continue;
+    const idx=D_GRID[gy*ISLAND_GW+gx];const img=tileImgs[idx];
+    if(!img||!img.complete||!img.naturalWidth)continue;
+    const w=D_TW*GROUND_SUP+1,h=D_TW*GROUND_SUP+1,x=lx*D_TW*GROUND_SUP,y=ly*D_TW*GROUND_SUP;
+    const r=(idx<=3)?GTILE_ROT[gy*ISLAND_GW+gx]:0; // sadece dolgu karolarini dondur
+    if(r===0){b.drawImage(img,x,y,w,h);}
+    else{b.save();b.translate(x+w/2,y+h/2);b.rotate(r*Math.PI/2);b.drawImage(img,-w/2,-h/2,w,h);b.restore();}
+  }
+  // organik noise overlay (karo sinirlarini gizler)
+  b.save();b.globalAlpha=0.10;b.globalCompositeOperation='overlay';
+  const p=b.createPattern(_groundNoise,'repeat');b.fillStyle=p;b.fillRect(0,0,px,px);b.restore();
+  return cv;
+}
+function _getGroundChunk(cx,cy){
+  const k=cx+','+cy;let c=_groundChunks.get(k);
+  if(c===undefined){
+    // tum karolar yuklenmeden uretme (eksik cizim olmasin)
+    if(tilesLoaded<tileImgs.length)return null;
+    c=_buildGroundChunk(cx,cy);_groundChunks.set(k,c);
+    // bellek siniri: cok fazla chunk birikirse uzaktakileri at (tepe ~12 gorunur)
+    if(_groundChunks.size>20){
+      const keep=new Set();
+      const cw=GROUND_CHUNK*D_TW;
+      const a=Math.max(0,Math.floor(cam.x/cw)-1), b2=Math.max(0,Math.floor(cam.y/cw)-1);
+      const a1=Math.ceil((cam.x+VW/cam.zoom)/cw)+1, b1=Math.ceil((cam.y+VH/cam.zoom)/cw)+1;
+      for(let yy=b2;yy<b1;yy++)for(let xx=a;xx<a1;xx++)keep.add(xx+','+yy);
+      for(const key of _groundChunks.keys())if(!keep.has(key))_groundChunks.delete(key);
+    }
+  }
+  return c;
+}
 
 // === ENGELLER (kaya/agac) - ada uzerinde, su grid'den ayri ===
 let obstacles=[];
@@ -2239,27 +2294,42 @@ function draw(){
   const z=cam.zoom;
   // ZEMİN TEXTURE - iki katman blend (tekrar deseni gizlenir)
   // === KARO BAZLI HARİTA RENDER ===
+  // ZEMİN: chunk bazli on-render (yumusak, karesiz). Yukleme sirasinda ham karo fallback.
   ctx.fillStyle='#1a4a6a';ctx.fillRect(0,0,VW,VH); // taban = derin su
   const cellW=islandCellW*z, cellH=islandCellH*z;
-  const gx0=Math.max(0,Math.floor(cam.x/islandCellW)-1);
-  const gy0=Math.max(0,Math.floor(cam.y/islandCellH)-1);
-  const gx1=Math.min(ISLAND_GW,Math.ceil((cam.x+VW/z)/islandCellW)+1);
-  const gy1=Math.min(ISLAND_GH,Math.ceil((cam.y+VH/z)/islandCellH)+1);
-  for(let gy=gy0;gy<gy1;gy++){
-    for(let gx=gx0;gx<gx1;gx++){
-      const idx=D_GRID[gy*ISLAND_GW+gx];
-      const img=tileImgs[idx];
-      const [px,py]=w2s(gx*islandCellW,gy*islandCellH);
-      // Konum floor + kenari bir sonraki karonun floor'una hizala (kaydirma kararliligi),
-      // sonra sag/alt kenara 1px bindirme ekle (dikis cizgisini kapatir).
-      const px0=Math.floor(px), py0=Math.floor(py);
-      const px1=Math.floor(px+cellW), py1=Math.floor(py+cellH);
-      const dw=(px1-px0)+1, dh=(py1-py0)+1;
-      if(img&&img.complete&&img.naturalWidth){
-        ctx.drawImage(img,px0,py0,dw,dh);
-      } else {
-        ctx.fillStyle=idx===2?'#1a4a6a':'#5a7048';
-        ctx.fillRect(px0,py0,dw,dh);
+  if(tilesLoaded>=tileImgs.length){
+    // --- CHUNK CIZIMI ---
+    const chunkWorld=GROUND_CHUNK*D_TW;
+    const ccx0=Math.max(0,Math.floor(cam.x/chunkWorld));
+    const ccy0=Math.max(0,Math.floor(cam.y/chunkWorld));
+    const ccx1=Math.min(Math.ceil(ISLAND_GW/GROUND_CHUNK),Math.ceil((cam.x+VW/z)/chunkWorld));
+    const ccy1=Math.min(Math.ceil(ISLAND_GH/GROUND_CHUNK),Math.ceil((cam.y+VH/z)/chunkWorld));
+    for(let ccy=ccy0;ccy<ccy1;ccy++)for(let ccx=ccx0;ccx<ccx1;ccx++){
+      const ck=_getGroundChunk(ccx,ccy);if(!ck)continue;
+      const [sx,sy]=w2s(ccx*chunkWorld,ccy*chunkWorld);
+      const dw=chunkWorld*z;
+      ctx.drawImage(ck,Math.floor(sx),Math.floor(sy),Math.ceil(dw)+1,Math.ceil(dw)+1);
+    }
+  } else {
+    // --- FALLBACK: ham karolar (sadece dokular yuklenirken) ---
+    const gx0=Math.max(0,Math.floor(cam.x/islandCellW)-1);
+    const gy0=Math.max(0,Math.floor(cam.y/islandCellH)-1);
+    const gx1=Math.min(ISLAND_GW,Math.ceil((cam.x+VW/z)/islandCellW)+1);
+    const gy1=Math.min(ISLAND_GH,Math.ceil((cam.y+VH/z)/islandCellH)+1);
+    for(let gy=gy0;gy<gy1;gy++){
+      for(let gx=gx0;gx<gx1;gx++){
+        const idx=D_GRID[gy*ISLAND_GW+gx];
+        const img=tileImgs[idx];
+        const [px,py]=w2s(gx*islandCellW,gy*islandCellH);
+        const px0=Math.floor(px), py0=Math.floor(py);
+        const px1=Math.floor(px+cellW), py1=Math.floor(py+cellH);
+        const dw=(px1-px0)+1, dh=(py1-py0)+1;
+        if(img&&img.complete&&img.naturalWidth){
+          ctx.drawImage(img,px0,py0,dw,dh);
+        } else {
+          ctx.fillStyle=idx===2?'#1a4a6a':'#5a7048';
+          ctx.fillRect(px0,py0,dw,dh);
+        }
       }
     }
   }
