@@ -19,7 +19,7 @@
   #pauseOverlay.show { display:flex; }
   #pauseOverlay h1 { font-size:28px; }
   #pauseOverlay button { background:#2c6fa3; color:#fff; border:none; border-radius:12px; padding:14px 32px; font-size:18px; }
-</style></head><body><div id="hud">RTS <b>v4.5</b> — Denge güncellemesi · <b>build 8</b></div>
+</style></head><body><div id="hud">RTS <b>v4.5</b> — Denge güncellemesi · <b>build 10</b></div>
 <div id="build">
   <button id="bTank" class="active">🔧 Tank<br>100</button>
   <button id="bHeli">🚁 Heli<br>150</button>
@@ -201,52 +201,42 @@ function initAudio(){
   _loadBradSounds();
   _initHeliSound();
 }
-// HELİKOPTER PERVANE SESİ - KAPALI (LFO surekli ugultu bug'ina yol aciyordu)
-let heliGain=null,heliOsc=null,heliLFO=null;
-function _initHeliSound(){
-  // Devre disi - heli ugultusu artik uretilmiyor
-  return;
-}
+// HELİKOPTER PERVANE SESİ - devre disi (su an kullanilmiyor)
+function _initHeliSound(){ return; }
 ['pointerdown','touchstart','click'].forEach(ev=>document.addEventListener(ev,initAudio,{once:false}));
-let engNode=null,engGain=null;
-function startEngine(){
-  if(!audioCtx||engNode)return;
-  engGain=audioCtx.createGain();engGain.gain.value=0;engGain.connect(audioCtx.destination);
-  const osc=audioCtx.createOscillator();osc.type='sawtooth';osc.frequency.value=52;
-  const lfo=audioCtx.createOscillator();lfo.frequency.value=9;
-  const lfoG=audioCtx.createGain();lfoG.gain.value=10;
-  lfo.connect(lfoG);lfoG.connect(osc.frequency);
-  const filt=audioCtx.createBiquadFilter();filt.type='lowpass';filt.frequency.value=220;
-  osc.connect(filt);filt.connect(engGain);
-  osc.start();lfo.start();engNode=osc;
-}
-function updateEngine(n){
-  if(!audioCtx)return;
-  if(!engNode)startEngine();
-  if(!engGain)return;
-  const vol=n>0?0.5*Math.min(n,3)/3:0;
-  engGain.gain.linearRampToValueAtTime(vol,audioCtx.currentTime+0.25);
-}
+
+// === MOTOR SESI (tek tanim, sizintisiz) ===
+// Oscillator + LFO bir kez kurulur, hareket eden birim sayisina gore sadece gain yumusakca degisir.
 let engineNode=null,engineGain=null,engineLfo=null;
 function startEngine(){
   if(!audioCtx||engineNode)return;
-  engineGain=audioCtx.createGain();engineGain.gain.setValueAtTime(0,audioCtx.currentTime);
+  engineGain=audioCtx.createGain();
+  engineGain.gain.setValueAtTime(0,audioCtx.currentTime);
+  // dusuk-gecirgen filtre -> bogus motor tinisi
+  const filter=audioCtx.createBiquadFilter();
+  filter.type='lowpass';filter.frequency.value=200;
+  filter.connect(engineGain);
   engineGain.connect(audioCtx.destination);
-  // Ana motor sesi - düşük frekanslı oscillator
-  engineNode=audioCtx.createOscillator();engineNode.type='sawtooth';engineNode.frequency.value=48;
-  engineNode.connect(engineGain);engineNode.start();
-  // LFO titreşim efekti
+  // ana ses kaynagi
+  engineNode=audioCtx.createOscillator();
+  engineNode.type='sawtooth';engineNode.frequency.value=48;
+  engineNode.connect(filter);
+  // titresim icin LFO
   engineLfo=audioCtx.createOscillator();engineLfo.frequency.value=7;
   const lfoGain=audioCtx.createGain();lfoGain.gain.value=8;
-  engineLfo.connect(lfoGain);lfoGain.connect(engineNode.frequency);engineLfo.start();
-  // Filtre ekle
-  const filter=audioCtx.createBiquadFilter();filter.type='lowpass';filter.frequency.value=200;
-  engineNode.disconnect();engineNode.connect(filter);filter.connect(engineGain);
+  engineLfo.connect(lfoGain);lfoGain.connect(engineNode.frequency);
+  engineNode.start();engineLfo.start();
 }
 function updateEngine(movingCount){
-  // Motor sesi tamamen kapali (bug: cift tanim + surekli aktif sizinti)
-  if(engineGain){try{engineGain.gain.value=0;}catch(e){}}
-  return;
+  if(!audioCtx)return;
+  if(!engineNode)startEngine();
+  if(!engineGain)return;
+  // hic hareket yoksa tam sus; varsa sayiyla orantili (max 0.4)
+  const target=movingCount>0?Math.min(0.4,0.18+movingCount*0.06):0;
+  const now=audioCtx.currentTime;
+  engineGain.gain.cancelScheduledValues(now);
+  engineGain.gain.setValueAtTime(engineGain.gain.value,now);
+  engineGain.gain.linearRampToValueAtTime(target,now+0.25);
 }
 const _SHOT_DATA="assets/sounds/_shot_data.mp3";
 let shotBuf=null;
@@ -326,7 +316,8 @@ const SCALE=0.075;
 const GROUND_TILE=512;const GROUND_SCALE=0.28;
 const FAC_SCALE=0.16;   // kışla ölçeği küçültüldü
 const MAP_W=3600,MAP_H=3600;
-const cam={x:0,y:0,zoom:0.85}; // bakış açısı 0.85
+const cam={x:0,y:0,zoom:1.05}; // baslangic bakis acisi (daha yakin)
+const MIN_ZOOM=0.55, MAX_ZOOM=1.8; // uzaklastirma alt siniri yukseltildi (cok kuculmesin)
 function clampCam(){cam.x=Math.max(0,Math.min(MAP_W-VW/cam.zoom,cam.x));cam.y=Math.max(0,Math.min(MAP_H-VH/cam.zoom,cam.y));}
 function w2s(wx,wy){return [(wx-cam.x)*cam.zoom,(wy-cam.y)*cam.zoom];}
 function s2w(sx,sy){return [sx/cam.zoom+cam.x,sy/cam.zoom+cam.y];}
@@ -399,18 +390,15 @@ window.addEventListener('load',()=>{
   if(bPause){
     bPause.onclick=()=>{
       paused=true;overlay.classList.add('show');
-      // tüm sesleri kesin sustur
-      try{if(typeof engineSnd!=='undefined'){engineSnd.volume=0;engineSnd.pause();}}catch(e){}
-      try{if(heliGain){heliGain.gain.value=0;}if(heliOsc){heliOsc.disconnect();}}catch(e){}
+      // motor sesini sustur + tum audio context'i askiya al
+      try{if(engineGain)engineGain.gain.value=0;}catch(e){}
       try{if(audioCtx&&audioCtx.state==='running')audioCtx.suspend();}catch(e){}
     };
     if(bResume)bResume.onclick=()=>{
       paused=false;overlay.classList.remove('show');
       try{if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume();}catch(e){}
-      try{if(typeof engineSnd!=='undefined')engineSnd.play().catch(()=>{});}catch(e){}
-      try{if(heliOsc&&heliGain){heliOsc.connect(heliGain);}}catch(e){} // heli sesini geri bağla
     };
-    if(overlay)overlay.onclick=(e)=>{if(e.target===overlay){paused=false;overlay.classList.remove('show');try{if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume();}catch(e2){}try{if(typeof engineSnd!=='undefined')engineSnd.play().catch(()=>{});}catch(e2){}try{if(heliOsc&&heliGain)heliOsc.connect(heliGain);}catch(e2){}}};
+    if(overlay)overlay.onclick=(e)=>{if(e.target===overlay){paused=false;overlay.classList.remove('show');try{if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume();}catch(e2){}}};
   }
   if(bAll){bAll.onclick=()=>{ // tüm oyuncu birimlerini seç
     let c=0;tanks.forEach(t=>{if(t.alive&&t.team==='player'){t.selected=true;c++;}else t.selected=false;});
@@ -960,7 +948,9 @@ function drawShadowSprite(img,dx,dy,w,h,angle,centerOffsetX,centerOffsetY){
   centerOffsetX=centerOffsetX||0;centerOffsetY=centerOffsetY||0;
   ctx.save();
   ctx.globalAlpha=SHADOW_ALPHA;
-  ctx.translate(dx+SHADOW_DX,dy+SHADOW_DY);
+  // gölge offset'i zoom ile ölçeklenir; aksi halde uzaklaşınca gölge birimden kayar
+  const z=cam.zoom;
+  ctx.translate(dx+SHADOW_DX*z,dy+SHADOW_DY*z);
   if(angle)ctx.rotate(angle);
   // CSS filter ile siyah silüet: brightness 0 + saturation 0 (sadece alpha kalır)
   ctx.filter='brightness(0)';
@@ -1047,7 +1037,7 @@ canvas.addEventListener('pointermove',e=>{
   if(!pointers.has(e.pointerId))return;pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
   // MINIMAP surukleme: kamera takip etsin
   if(minimapDragging){minimapJump(e.clientX,e.clientY);return;}
-  if(pointers.size===2&&pinchStart){const p=[...pointers.values()];const d=Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y);const mid={x:(p[0].x+p[1].x)/2,y:(p[0].y+p[1].y)/2};cam.zoom=Math.max(0.25,Math.min(1.8,pinchStart.zoom*(d/pinchStart.d)));if(pinchStart.mid){cam.x+=(pinchStart.mid.x-mid.x)/cam.zoom;cam.y+=(pinchStart.mid.y-mid.y)/cam.zoom;}pinchStart.mid=mid;clampCam();didDrag=true;}
+  if(pointers.size===2&&pinchStart){const p=[...pointers.values()];const d=Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y);const mid={x:(p[0].x+p[1].x)/2,y:(p[0].y+p[1].y)/2};cam.zoom=Math.max(MIN_ZOOM,Math.min(MAX_ZOOM,pinchStart.zoom*(d/pinchStart.d)));if(pinchStart.mid){cam.x+=(pinchStart.mid.x-mid.x)/cam.zoom;cam.y+=(pinchStart.mid.y-mid.y)/cam.zoom;}pinchStart.mid=mid;clampCam();didDrag=true;}
   else if(pointers.size===1&&dragStart){
     const dx=e.clientX-dragStart.x,dy=e.clientY-dragStart.y;
     if(Math.abs(dx)>6||Math.abs(dy)>6){didDrag=true;if(holdTimer&&!selectMode){clearTimeout(holdTimer);holdTimer=null;}}
@@ -1837,15 +1827,10 @@ function update(){
   }
   const pa=tanks.filter(t=>t.alive&&t.team==='player').length;
   const ea=tanks.filter(t=>t.alive&&t.team==='enemy').length;
-  // HELİKOPTER pervane sesi: ekrandaki heli sayısına göre
-  if(heliGain&&audioCtx){
-    const heliCount=tanks.filter(t=>t.alive&&t.unitType==='heli').length;
-    const target=paused?0:Math.min(0.12,heliCount*0.04); // her heli biraz ekler, max 0.12
-    heliGain.gain.value+=(target-heliGain.gain.value)*0.05; // yumuşak geçiş
-  }
   const sc=tanks.filter(t=>t.selected&&t.alive).length;
-  // Motor sesi GEÇİCİ KAPALI (kullanıcı isteği)
-  updateEngine(0);
+  // Motor sesi: hareket eden oyuncu birimi sayisina gore (duraklatildiysa sus)
+  const movingCount=paused?0:tanks.filter(t=>t.alive&&t.team==='player'&&Math.hypot(t.tx-t.x,t.ty-t.y)>t.speed+1).length;
+  updateEngine(movingCount);
 if(statusFlashT>0)statusEl.textContent=statusFlash;
   else statusEl.textContent=`💰${Math.floor(resources)} (düşman ${Math.floor(enemyFactory.resources)}) | Kışlaya dokun=üret | Sen: ${pa} | Düşman: ${ea}`;
 }
@@ -2265,11 +2250,17 @@ function draw(){
       const idx=D_GRID[gy*ISLAND_GW+gx];
       const img=tileImgs[idx];
       const [px,py]=w2s(gx*islandCellW,gy*islandCellH);
+      // Karo kenarlarini bir sonraki karonun baslangicina hizala:
+      // konum floor, genislik = (sonraki floor - bu floor). Boylece kaydirirken
+      // komsu karolar arasinda 1px bosluk acilip titremesi olmaz.
+      const px0=Math.floor(px), py0=Math.floor(py);
+      const px1=Math.floor(px+cellW), py1=Math.floor(py+cellH);
+      const dw=px1-px0, dh=py1-py0;
       if(img&&img.complete&&img.naturalWidth){
-        ctx.drawImage(img,Math.floor(px),Math.floor(py),Math.ceil(cellW)+1,Math.ceil(cellH)+1);
+        ctx.drawImage(img,px0,py0,dw,dh);
       } else {
         ctx.fillStyle=idx===2?'#1a4a6a':'#5a7048';
-        ctx.fillRect(Math.floor(px),Math.floor(py),Math.ceil(cellW)+1,Math.ceil(cellH)+1);
+        ctx.fillRect(px0,py0,dw,dh);
       }
     }
   }
