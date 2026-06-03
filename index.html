@@ -25,7 +25,7 @@
   #pauseOverlay.show { display:flex; }
   #pauseOverlay h1 { font-size:28px; }
   #pauseOverlay button { background:#2c6fa3; color:#fff; border:none; border-radius:12px; padding:14px 32px; font-size:18px; }
-</style></head><body><div id="hud">RTS <b>v4.5</b> — Denge güncellemesi · <b>build 14</b></div>
+</style></head><body><div id="hud">RTS <b>v4.5</b> — Denge güncellemesi · <b>build 15</b></div>
 <div id="dbgBtn">🐞</div><div id="dbgPanel"></div>
 <div id="build">
   <button id="bTank" class="active">🔧 Tank<br>100</button>
@@ -134,11 +134,11 @@ const SLD_ANIMS={
 const SLD_W=69;const SLD_H=124;
 
 // === M1A2 ASSETS ===
-const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+const canvas=document.getElementById('game'); let ctx=canvas.getContext('2d');
 let pixiApp=null, pixiGround=null, pixiReady=false; // Pixi globalleri (resize'dan once tanimli olmali)
 const statusEl=document.getElementById('status');
 let VW,VH,DPR;
-function resize(){DPR=Math.min(window.devicePixelRatio||1,2.5);VW=innerWidth;VH=innerHeight;canvas.width=Math.floor(VW*DPR);canvas.height=Math.floor(VH*DPR);canvas.style.width=VW+'px';canvas.style.height=VH+'px';ctx.setTransform(DPR,0,0,DPR,0,0);ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';if(pixiApp&&pixiReady){pixiApp.renderer.resize(VW,VH);}}
+function resize(){DPR=Math.min(window.devicePixelRatio||1,2.5);VW=innerWidth;VH=innerHeight;canvas.width=Math.floor(VW*DPR);canvas.height=Math.floor(VH*DPR);canvas.style.width=VW+'px';canvas.style.height=VH+'px';ctx.setTransform(DPR,0,0,DPR,0,0);ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';if(pixiApp&&pixiReady){pixiApp.renderer.resize(VW,VH);if(unitCanvas){unitCanvas.width=Math.floor(VW*DPR);unitCanvas.height=Math.floor(VH*DPR);pixiUnitSprite.width=VW;pixiUnitSprite.height=VH;}}}
 addEventListener('resize',resize);resize();
 
 const hullImg=new Image();hullImg.src=HULL;
@@ -736,6 +736,8 @@ function _getGroundChunk(cx,cy){
 // Zemin chunk'lari Pixi sprite olarak GPU'da cizilir. Oyun canvas'i ustte seffaf.
 // (pixiApp/pixiGround/pixiReady en ustte tanimli)
 const _pixiChunkSprites=new Map(); // "cx,cy" -> PIXI.Sprite
+// Birimler icin offscreen canvas + Pixi sprite (zemin uzerinde, GPU'da)
+let unitCanvas=null, unitCtx=null, pixiUnitSprite=null, pixiUnitTex=null;
 async function initPixi(){
   try{
     if(typeof PIXI==='undefined'){DBG.pixi='PixiJS yüklenmedi (CDN?) → Canvas fallback';return;}
@@ -744,6 +746,14 @@ async function initPixi(){
     document.getElementById('pixi').appendChild(pixiApp.canvas);
     pixiGround=new PIXI.Container();
     pixiApp.stage.addChild(pixiGround);
+    // Birim katmani: ekran-uzayinda offscreen canvas -> Pixi sprite (zeminin ustunde)
+    unitCanvas=document.createElement('canvas');
+    unitCanvas.width=Math.floor(VW*DPR); unitCanvas.height=Math.floor(VH*DPR);
+    unitCtx=unitCanvas.getContext('2d');
+    pixiUnitTex=new PIXI.Texture({source:new PIXI.CanvasSource({resource:unitCanvas}),dynamic:true});
+    pixiUnitSprite=new PIXI.Sprite(pixiUnitTex);
+    pixiUnitSprite.width=VW; pixiUnitSprite.height=VH; // ekrana tam otur
+    pixiApp.stage.addChild(pixiUnitSprite);
     pixiReady=true;
     DBG.pixi='Pixi '+PIXI.VERSION+' '+(pixiApp.renderer.type===1?'WebGL':'?');
   }catch(e){pixiReady=false;DBG.pixi='HATA: '+(e&&e.message?e.message:e);DBG.err=DBG.pixi;}
@@ -2461,12 +2471,25 @@ function draw(){
   // PERFORMANS: ekran disindaki birimleri eleme (culling)
   const cullL=cam.x-150, cullR=cam.x+VW/cam.zoom+150, cullT=cam.y-150, cullB=cam.y+VH/cam.zoom+150;
   const onScreen=t=>t.x>=cullL&&t.x<=cullR&&t.y>=cullT&&t.y<=cullB;
+  // BİRİMLER: Pixi aktifse offscreen unit canvas'a ciz (GPU sprite), degilse ana ctx'e.
+  let _prevCtx=null;
+  if(pixiReady&&unitCtx){
+    _prevCtx=ctx; ctx=unitCtx;
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    ctx.clearRect(0,0,VW,VH);
+    ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
+  }
   // önce YER birimleri (tank), y-sort
   const ground=tanks.filter(t=>t.alive&&t.unitType!=='heli'&&onScreen(t)).slice().sort((a,b)=>a.y-b.y);
   for(const t of ground)drawTankWorld(t);
   // sonra HAVA birimleri (helikopter) - her zaman üstte, y-sort
   const air=tanks.filter(t=>t.alive&&t.unitType==='heli'&&onScreen(t)).slice().sort((a,b)=>a.y-b.y);
   for(const t of air)drawTankWorld(t);
+  if(_prevCtx){
+    // birim texture'ini GPU'ya guncelle, ana ctx'e geri don
+    pixiUnitTex.source.update();
+    ctx=_prevCtx;
+  }
   ctx.globalCompositeOperation='lighter';
   for(const b of bullets){const[x,y]=w2s(b.x,b.y);
     const sp=Math.hypot(b.vx,b.vy)||1;const ux=b.vx/sp,uy=b.vy/sp; // yön
