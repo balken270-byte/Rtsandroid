@@ -1,7 +1,9 @@
-<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"><title>RTS - v2.8</title><style>
+<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"><title>RTS - v2.8</title><script src="https://cdn.jsdelivr.net/npm/pixi.js@8.x/dist/pixi.min.js"></script><style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html,body { width:100%; height:100%; overflow:hidden; background:#0d1014; font-family:system-ui,sans-serif; }
-  #game { display:block; touch-action:none; width:100%; height:100%; }
+  #pixi { position:fixed; inset:0; z-index:0; }
+  #pixi canvas { display:block; width:100%; height:100%; }
+  #game { display:block; touch-action:none; width:100%; height:100%; position:relative; z-index:1; }
   #hud { position:fixed; top:0; left:0; right:0; padding:8px 12px; color:#cfe8ff; font-size:11px; pointer-events:none; text-shadow:0 1px 3px #000; z-index:2;}
   #hud b { color:#7fd1ff; }
   #status { position:fixed; bottom:62px; left:0; right:0; padding:6px 12px; color:#ffd27f; font-size:11px; pointer-events:none; text-shadow:0 1px 3px #000; text-align:center; z-index:2;}
@@ -19,7 +21,7 @@
   #pauseOverlay.show { display:flex; }
   #pauseOverlay h1 { font-size:28px; }
   #pauseOverlay button { background:#2c6fa3; color:#fff; border:none; border-radius:12px; padding:14px 32px; font-size:18px; }
-</style></head><body><div id="hud">RTS <b>v4.5</b> — Denge güncellemesi · <b>build 12</b></div>
+</style></head><body><div id="hud">RTS <b>v4.5</b> — Denge güncellemesi · <b>build 13</b></div>
 <div id="build">
   <button id="bTank" class="active">🔧 Tank<br>100</button>
   <button id="bHeli">🚁 Heli<br>150</button>
@@ -35,7 +37,7 @@
   <button id="bStop">⊗ Dur</button>
 </div>
 <div id="pauseOverlay"><h1>⏸ Oyun Durdu</h1><button id="bResume">▶ Devam Et</button></div>
-<div id="status"></div><canvas id="game"></canvas><script>
+<div id="status"></div><div id="pixi"></div><canvas id="game"></canvas><script>
 
 const HULL="assets/images/tank/hull.png";
 const TURRET="assets/images/tank/turret.png";
@@ -130,7 +132,7 @@ const SLD_W=69;const SLD_H=124;
 const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
 const statusEl=document.getElementById('status');
 let VW,VH,DPR;
-function resize(){DPR=Math.min(window.devicePixelRatio||1,2.5);VW=innerWidth;VH=innerHeight;canvas.width=Math.floor(VW*DPR);canvas.height=Math.floor(VH*DPR);canvas.style.width=VW+'px';canvas.style.height=VH+'px';ctx.setTransform(DPR,0,0,DPR,0,0);ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';}
+function resize(){DPR=Math.min(window.devicePixelRatio||1,2.5);VW=innerWidth;VH=innerHeight;canvas.width=Math.floor(VW*DPR);canvas.height=Math.floor(VH*DPR);canvas.style.width=VW+'px';canvas.style.height=VH+'px';ctx.setTransform(DPR,0,0,DPR,0,0);ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';if(typeof pixiApp!=='undefined'&&pixiApp&&pixiReady){pixiApp.renderer.resize(VW,VH);}}
 addEventListener('resize',resize);resize();
 
 const hullImg=new Image();hullImg.src=HULL;
@@ -722,6 +724,57 @@ function _getGroundChunk(cx,cy){
     }
   }
   return c;
+}
+
+// === PIXI ZEMİN KATMANI (WebGL) ===
+// Zemin chunk'lari Pixi sprite olarak GPU'da cizilir. Oyun canvas'i ustte seffaf.
+let pixiApp=null, pixiGround=null, pixiReady=false;
+const _pixiChunkSprites=new Map(); // "cx,cy" -> PIXI.Sprite
+async function initPixi(){
+  if(typeof PIXI==='undefined'){console.warn('PixiJS yüklenmedi, Canvas zemine düşülüyor');return;}
+  try{
+    pixiApp=new PIXI.Application();
+    await pixiApp.init({width:VW,height:VH,background:'#1a4a6a',antialias:true,resolution:DPR,autoDensity:true});
+    document.getElementById('pixi').appendChild(pixiApp.canvas);
+    pixiGround=new PIXI.Container();
+    pixiApp.stage.addChild(pixiGround);
+    pixiReady=true;
+  }catch(e){console.warn('Pixi init hatası:',e);pixiReady=false;}
+}
+function _getPixiChunkSprite(cx,cy){
+  const k=cx+','+cy;let sp=_pixiChunkSprites.get(k);
+  if(sp)return sp;
+  const cv=_getGroundChunk(cx,cy);
+  if(!cv)return null;
+  const tex=PIXI.Texture.from(cv);
+  sp=new PIXI.Sprite(tex);
+  sp.x=cx*GROUND_CHUNK*D_TW; sp.y=cy*GROUND_CHUNK*D_TW;
+  sp.width=GROUND_CHUNK*D_TW; sp.height=GROUND_CHUNK*D_TW;
+  pixiGround.addChild(sp);
+  _pixiChunkSprites.set(k,sp);
+  return sp;
+}
+// Her karede: gorunur chunk'lari uret + kamerayi senkronla
+function syncPixiGround(){
+  if(!pixiReady)return;
+  const cw=GROUND_CHUNK*D_TW;
+  const cx0=Math.max(0,Math.floor(cam.x/cw)), cy0=Math.max(0,Math.floor(cam.y/cw));
+  const cx1=Math.min(Math.ceil(ISLAND_GW/GROUND_CHUNK),Math.ceil((cam.x+VW/cam.zoom)/cw));
+  const cy1=Math.min(Math.ceil(ISLAND_GH/GROUND_CHUNK),Math.ceil((cam.y+VH/cam.zoom)/cw));
+  for(let cy=cy0;cy<cy1;cy++)for(let cx=cx0;cx<cx1;cx++)_getPixiChunkSprite(cx,cy);
+  // bellek: gorunmeyen sprite'lari sahneden cikar
+  if(_pixiChunkSprites.size>24){
+    for(const [key,sp] of _pixiChunkSprites){
+      const [kx,ky]=key.split(',').map(Number);
+      if(kx<cx0-1||kx>=cx1+1||ky<cy0-1||ky>=cy1+1){
+        pixiGround.removeChild(sp);sp.destroy();_pixiChunkSprites.delete(key);
+      }
+    }
+  }
+  // KAMERA SENKRON
+  pixiGround.scale.set(cam.zoom);
+  pixiGround.x=-cam.x*cam.zoom;
+  pixiGround.y=-cam.y*cam.zoom;
 }
 
 // === ENGELLER (kaya/agac) - ada uzerinde, su grid'den ayri ===
@@ -2295,6 +2348,12 @@ function draw(){
   // ZEMİN TEXTURE - iki katman blend (tekrar deseni gizlenir)
   // === KARO BAZLI HARİTA RENDER ===
   // ZEMİN: chunk bazli on-render (yumusak, karesiz). Yukleme sirasinda ham karo fallback.
+  // ZEMİN: Pixi hazirsa GPU'da cizilir (alt katman), Canvas seffaf birakilir.
+  if(pixiReady){
+    syncPixiGround();
+    ctx.clearRect(0,0,VW,VH); // oyun canvas'i seffaf -> altta Pixi zemin gorunur
+  } else {
+  // --- Pixi yoksa: Canvas zemin (fallback) ---
   ctx.fillStyle='#1a4a6a';ctx.fillRect(0,0,VW,VH); // taban = derin su
   const cellW=islandCellW*z, cellH=islandCellH*z;
   if(tilesLoaded>=tileImgs.length){
@@ -2333,6 +2392,7 @@ function draw(){
       }
     }
   }
+  } // /Pixi yoksa
     drawGroundDetails();
   // SU dalga parlamasi (animasyon)
   drawIslandWater();
@@ -2505,6 +2565,7 @@ function loop(ts){
   if(steps>0)draw();
   requestAnimationFrame(loop);
 }
+initPixi(); // Pixi zemin katmanini baslat (async, hazir olunca devreye girer)
 requestAnimationFrame(loop);
 
 
