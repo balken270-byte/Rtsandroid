@@ -1,12 +1,16 @@
 <!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"><title>RTS - v2.8</title><script src="https://cdn.jsdelivr.net/npm/pixi.js@8.x/dist/pixi.min.js"></script><style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html,body { width:100%; height:100%; overflow:hidden; background:#0d1014; font-family:system-ui,sans-serif; }
-  #pixi { position:fixed; inset:0; z-index:0; }
+  #pixi { position:fixed; inset:0; z-index:0; background:#1a4a6a; }
   #pixi canvas { display:block; width:100%; height:100%; }
-  #game { display:block; touch-action:none; width:100%; height:100%; position:relative; z-index:1; }
+  #game { display:block; touch-action:none; position:fixed; inset:0; width:100%; height:100%; z-index:1; background:transparent; }
   #hud { position:fixed; top:0; left:0; right:0; padding:8px 12px; color:#cfe8ff; font-size:11px; pointer-events:none; text-shadow:0 1px 3px #000; z-index:2;}
   #hud b { color:#7fd1ff; }
   #status { position:fixed; bottom:62px; left:0; right:0; padding:6px 12px; color:#ffd27f; font-size:11px; pointer-events:none; text-shadow:0 1px 3px #000; text-align:center; z-index:2;}
+  #dbgBtn { position:fixed; top:6px; right:6px; z-index:20; width:34px; height:34px; line-height:34px; text-align:center; font-size:18px; background:rgba(0,0,0,0.55); border-radius:8px; cursor:pointer; user-select:none; }
+  #dbgPanel { position:fixed; top:46px; right:6px; z-index:20; min-width:170px; max-width:60vw; padding:8px 10px; background:rgba(8,12,18,0.88); border:1px solid #2a3a4a; border-radius:8px; color:#bfe3ff; font:11px/1.5 monospace; white-space:pre; display:none; pointer-events:none; }
+  #dbgPanel.on { display:block; }
+  #dbgPanel .e { color:#ff8f8f; }
   #ctrl { position:fixed; top:34px; right:10px; z-index:3; display:flex; gap:6px; flex-direction:column; align-items:flex-end;}
   .row { display:flex; gap:6px; }
   #ctrl button { background:rgba(20,30,40,0.85); color:#cfe8ff; border:1px solid #3a5a7a; border-radius:8px; padding:8px 12px; font-size:13px; }
@@ -21,7 +25,8 @@
   #pauseOverlay.show { display:flex; }
   #pauseOverlay h1 { font-size:28px; }
   #pauseOverlay button { background:#2c6fa3; color:#fff; border:none; border-radius:12px; padding:14px 32px; font-size:18px; }
-</style></head><body><div id="hud">RTS <b>v4.5</b> — Denge güncellemesi · <b>build 13</b></div>
+</style></head><body><div id="hud">RTS <b>v4.5</b> — Denge güncellemesi · <b>build 14</b></div>
+<div id="dbgBtn">🐞</div><div id="dbgPanel"></div>
 <div id="build">
   <button id="bTank" class="active">🔧 Tank<br>100</button>
   <button id="bHeli">🚁 Heli<br>150</button>
@@ -130,9 +135,10 @@ const SLD_W=69;const SLD_H=124;
 
 // === M1A2 ASSETS ===
 const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+let pixiApp=null, pixiGround=null, pixiReady=false; // Pixi globalleri (resize'dan once tanimli olmali)
 const statusEl=document.getElementById('status');
 let VW,VH,DPR;
-function resize(){DPR=Math.min(window.devicePixelRatio||1,2.5);VW=innerWidth;VH=innerHeight;canvas.width=Math.floor(VW*DPR);canvas.height=Math.floor(VH*DPR);canvas.style.width=VW+'px';canvas.style.height=VH+'px';ctx.setTransform(DPR,0,0,DPR,0,0);ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';if(typeof pixiApp!=='undefined'&&pixiApp&&pixiReady){pixiApp.renderer.resize(VW,VH);}}
+function resize(){DPR=Math.min(window.devicePixelRatio||1,2.5);VW=innerWidth;VH=innerHeight;canvas.width=Math.floor(VW*DPR);canvas.height=Math.floor(VH*DPR);canvas.style.width=VW+'px';canvas.style.height=VH+'px';ctx.setTransform(DPR,0,0,DPR,0,0);ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';if(pixiApp&&pixiReady){pixiApp.renderer.resize(VW,VH);}}
 addEventListener('resize',resize);resize();
 
 const hullImg=new Image();hullImg.src=HULL;
@@ -728,22 +734,38 @@ function _getGroundChunk(cx,cy){
 
 // === PIXI ZEMİN KATMANI (WebGL) ===
 // Zemin chunk'lari Pixi sprite olarak GPU'da cizilir. Oyun canvas'i ustte seffaf.
-let pixiApp=null, pixiGround=null, pixiReady=false;
+// (pixiApp/pixiGround/pixiReady en ustte tanimli)
 const _pixiChunkSprites=new Map(); // "cx,cy" -> PIXI.Sprite
 async function initPixi(){
   try{
-    if(typeof PIXI==='undefined'){statusEl.textContent='⚠️ PixiJS yüklenmedi (CDN?) — Canvas zemine düşülüyor';return;}
+    if(typeof PIXI==='undefined'){DBG.pixi='PixiJS yüklenmedi (CDN?) → Canvas fallback';return;}
     pixiApp=new PIXI.Application();
     await pixiApp.init({width:VW,height:VH,background:'#1a4a6a',antialias:true,resolution:DPR,autoDensity:true});
     document.getElementById('pixi').appendChild(pixiApp.canvas);
     pixiGround=new PIXI.Container();
     pixiApp.stage.addChild(pixiGround);
     pixiReady=true;
-    statusEl.textContent='✅ Pixi '+PIXI.VERSION+' hazır';
-  }catch(e){pixiReady=false;statusEl.textContent='❌ Pixi hata: '+(e&&e.message?e.message:e);}
+    DBG.pixi='Pixi '+PIXI.VERSION+' '+(pixiApp.renderer.type===1?'WebGL':'?');
+  }catch(e){pixiReady=false;DBG.pixi='HATA: '+(e&&e.message?e.message:e);DBG.err=DBG.pixi;}
 }
-// global hata yakalayici (siyah ekran teshisi)
-window.addEventListener('error',ev=>{try{statusEl.textContent='❌ JS hata: '+ev.message+' @'+ev.lineno;}catch(_){}});
+// === DEBUG SİSTEMİ ===
+const DBG={fps:0,pixi:'başlatılıyor...',chunks:0,err:'-'};
+const _dbgPanel=document.getElementById('dbgPanel');
+document.getElementById('dbgBtn').addEventListener('click',()=>_dbgPanel.classList.toggle('on'));
+window.addEventListener('error',ev=>{DBG.err=ev.message+' @'+ev.lineno;});
+let _dbgFrames=0,_dbgLast=performance.now();
+function updateDebug(){
+  _dbgFrames++;const now=performance.now();
+  if(now-_dbgLast>=500){DBG.fps=Math.round(_dbgFrames*1000/(now-_dbgLast));_dbgFrames=0;_dbgLast=now;}
+  if(!_dbgPanel.classList.contains('on'))return;
+  DBG.chunks=(typeof _pixiChunkSprites!=='undefined')?_pixiChunkSprites.size:0;
+  let pa='-',ea='-';
+  if(typeof tanks!=='undefined'&&tanks){pa=tanks.filter(t=>t.alive&&t.team==='player').length;ea=tanks.filter(t=>t.alive&&t.team==='enemy').length;}
+  _dbgPanel.innerHTML='FPS: '+DBG.fps+'\nRender: '+DBG.pixi+'\nChunk: '+DBG.chunks
+    +'\nZoom: '+(cam.zoom.toFixed(2))+'\nCam: '+Math.round(cam.x)+','+Math.round(cam.y)
+    +'\nBirim: '+pa+' | Düşman: '+ea
+    +'\n<span class="e">Hata: '+DBG.err+'</span>';
+}
 function _getPixiChunkSprite(cx,cy){
   const k=cx+','+cy;let sp=_pixiChunkSprites.get(k);
   if(sp)return sp;
@@ -2566,6 +2588,7 @@ function loop(ts){
   while(accumulator>=FRAME_MS&&steps<2){update();accumulator-=FRAME_MS;steps++;}
   if(accumulator>=FRAME_MS)accumulator=0; // birikimi sıfırla
   if(steps>0)draw();
+  updateDebug();
   requestAnimationFrame(loop);
 }
 initPixi(); // Pixi zemin katmanini baslat (async, hazir olunca devreye girer)
