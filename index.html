@@ -731,16 +731,19 @@ function _getGroundChunk(cx,cy){
 let pixiApp=null, pixiGround=null, pixiReady=false;
 const _pixiChunkSprites=new Map(); // "cx,cy" -> PIXI.Sprite
 async function initPixi(){
-  if(typeof PIXI==='undefined'){console.warn('PixiJS yüklenmedi, Canvas zemine düşülüyor');return;}
   try{
+    if(typeof PIXI==='undefined'){statusEl.textContent='⚠️ PixiJS yüklenmedi (CDN?) — Canvas zemine düşülüyor';return;}
     pixiApp=new PIXI.Application();
     await pixiApp.init({width:VW,height:VH,background:'#1a4a6a',antialias:true,resolution:DPR,autoDensity:true});
     document.getElementById('pixi').appendChild(pixiApp.canvas);
     pixiGround=new PIXI.Container();
     pixiApp.stage.addChild(pixiGround);
     pixiReady=true;
-  }catch(e){console.warn('Pixi init hatası:',e);pixiReady=false;}
+    statusEl.textContent='✅ Pixi '+PIXI.VERSION+' hazır';
+  }catch(e){pixiReady=false;statusEl.textContent='❌ Pixi hata: '+(e&&e.message?e.message:e);}
 }
+// global hata yakalayici (siyah ekran teshisi)
+window.addEventListener('error',ev=>{try{statusEl.textContent='❌ JS hata: '+ev.message+' @'+ev.lineno;}catch(_){}});
 function _getPixiChunkSprite(cx,cy){
   const k=cx+','+cy;let sp=_pixiChunkSprites.get(k);
   if(sp)return sp;
