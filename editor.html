@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=4, user-scalable=yes">
+<title>RA1 Harita Çarpışma Editörü</title>
+<style>
+  :root{ --bg:#11161c; --panel:#1b232c; --line:#2c3742; --txt:#dce4ec; --accent:#4fb0ff; --rock:#b94ff0; --water:#ff4f5e; }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:'Trebuchet MS',system-ui,sans-serif;}
+  header{position:sticky;top:0;z-index:10;background:var(--panel);border-bottom:1px solid var(--line);padding:8px 10px;}
+  h1{font-size:15px;margin:0 0 6px;letter-spacing:.5px;}
+  .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+  button{background:#243140;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px 11px;font-size:13px;font-weight:bold;cursor:pointer;}
+  button:active{transform:scale(.96);}
+  button.on{background:var(--accent);color:#06121f;border-color:var(--accent);}
+  .mode-rock.on{background:var(--rock);border-color:var(--rock);color:#fff;}
+  .mode-water.on{background:var(--water);border-color:var(--water);color:#fff;}
+  .mode-clear.on{background:#3ad17a;border-color:#3ad17a;color:#06121f;}
+  .hint{font-size:11px;color:#8aa0b4;margin-top:5px;line-height:1.4;}
+  #wrap{overflow:auto;width:100vw;height:calc(100vh - 132px);background:#0a0e13;touch-action:pan-x pan-y;}
+  canvas{display:block;image-rendering:pixelated;}
+  .stat{font-size:11px;color:#8aa0b4;}
+  .pill{padding:2px 7px;border-radius:10px;font-size:11px;font-weight:bold;}
+  .pill.rock{background:var(--rock);color:#fff;}
+  .pill.water{background:var(--water);color:#fff;}
+  .pill.clear{background:#3ad17a;color:#06121f;}
+  textarea{width:100%;height:80px;background:#0a0e13;color:#7fd0ff;border:1px solid var(--line);border-radius:8px;font-size:10px;font-family:monospace;margin-top:6px;display:none;}
+</style>
+</head>
+<body>
+<header>
+  <h1>🗺️ RA1 Çarpışma Editörü</h1>
+  <div class="row">
+    <button id="mRock" class="mode-rock on">🟪 Kaya (engel)</button>
+    <button id="mWater" class="mode-water">🟥 Su (engel)</button>
+    <button id="mClear" class="mode-clear">🟩 Geçilebilir</button>
+  </div>
+  <div class="row" style="margin-top:6px;">
+    <button id="paint" class="on">✏️ Boya</button>
+    <button id="erase">🧽 Sadece geçilebilir yap</button>
+    <button id="overlayBtn" class="on">👁️ Renk göster</button>
+    <button id="undo">↩️ Geri al</button>
+    <button id="save">💾 Kaydet (indir)</button>
+  </div>
+  <div class="row" style="margin-top:6px;">
+    <button id="autoWater">💧 Suyu otomatik bul</button>
+    <button id="clearRock">🧹 Kayaları sıfırla</button>
+    <button id="clearAll">⬜ Hepsini geçilebilir</button>
+  </div>
+  <div class="hint">
+    Boya modu açıkken haritaya <b>dokun/sürükle</b> → seçili tipi (kaya/su/geçilebilir) işaretler.
+    İki parmakla yakınlaştır/kaydır. Bitince <b>Kaydet</b> → güncel <b>ra1_map.json</b> + <b>ra1_terrain.json</b> iner.
+  </div>
+  <div class="row" style="margin-top:6px;">
+    <span class="stat">Fırça:</span>
+    <button id="b1" class="on">1×1</button><button id="b2">3×3</button><button id="b3">5×5</button>
+    <span class="stat" id="counts"></span>
+  </div>
+</header>
+
+<div id="wrap"><canvas id="cv"></canvas></div>
+
+<script>
+const TS=24;             // tile piksel (gercek)
+const VS=12;             // editorde gosterim olcegi (her tile VS px)
+let W=0,H=0, grid=[], coll=[], tileImg={}, ready=false;
+let mode='rock', painting=true, showOverlay=true, brush=1;
+const undoStack=[];
+
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+ctx.imageSmoothingEnabled=false;
+
+async function load(){
+  const [map, terr] = await Promise.all([
+    fetch('ra1_map.json').then(r=>r.json()),
+    fetch('ra1_terrain.json').then(r=>r.json()).catch(()=>null)
+  ]);
+  W=map.w; H=map.h; grid=map.grid;
+  coll = (terr&&terr.collision) ? terr.collision.map(r=>r.slice()) : map.collision.map(r=>r.slice());
+  cv.width=W*VS; cv.height=H*VS;
+  // tile gorsellerini yukle
+  const keys=new Set(); for(const row of grid) for(const k of row) keys.add(k);
+  let loaded=0; const total=keys.size;
+  // ayrica tiles.json'dan gorselleri al
+  const tiles=await fetch('ra1_tiles.json').then(r=>r.json());
+  for(const k of keys){
+    const im=new Image();
+    im.onload=()=>{ loaded++; if(loaded>=total){ ready=true; draw(); } };
+    im.onerror=()=>{ loaded++; if(loaded>=total){ ready=true; draw(); } };
+    im.src=tiles[k]||''; tileImg[k]=im;
+  }
+  updateCounts();
+  draw();
+}
+
+function draw(){
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const k=grid[y][x], im=tileImg[k];
+    if(ready && im && im.complete && im.naturalWidth){
+      ctx.drawImage(im, x*VS, y*VS, VS, VS);
+    } else { ctx.fillStyle='#1c3a22'; ctx.fillRect(x*VS,y*VS,VS,VS); }
+    if(showOverlay){
+      const c=coll[y][x];
+      if(c===2){ ctx.fillStyle='rgba(185,79,240,0.5)'; ctx.fillRect(x*VS,y*VS,VS,VS); }
+      else if(c===1){ ctx.fillStyle='rgba(255,79,94,0.45)'; ctx.fillRect(x*VS,y*VS,VS,VS); }
+    }
+  }
+  // ince grid
+  ctx.strokeStyle='rgba(255,255,255,0.05)'; ctx.lineWidth=1;
+  for(let x=0;x<=W;x+=4){ ctx.beginPath();ctx.moveTo(x*VS,0);ctx.lineTo(x*VS,H*VS);ctx.stroke(); }
+  for(let y=0;y<=H;y+=4){ ctx.beginPath();ctx.moveTo(0,y*VS);ctx.lineTo(W*VS,y*VS);ctx.stroke(); }
+}
+
+function updateCounts(){
+  let k0=0,k1=0,k2=0;
+  for(const row of coll)for(const c of row){ if(c===0)k0++; else if(c===1)k1++; else k2++; }
+  document.getElementById('counts').innerHTML=
+    `<span class="pill clear">geçilir ${k0}</span> <span class="pill water">su ${k1}</span> <span class="pill rock">kaya ${k2}</span>`;
+}
+
+function applyAt(px,py){
+  const gx=Math.floor(px/VS), gy=Math.floor(py/VS);
+  if(gx<0||gx>=W||gy<0||gy>=H) return;
+  const val = painting ? (mode==='rock'?2 : mode==='water'?1 : 0) : 0;
+  const r=Math.floor(brush/2);
+  for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){
+    const x=gx+dx,y=gy+dy;
+    if(x>=0&&x<W&&y>=0&&y<H) coll[y][x]=val;
+  }
+}
+
+let drawing=false, moved=false;
+function evtPos(e){
+  const rect=cv.getBoundingClientRect();
+  const t=e.touches?e.touches[0]:e;
+  return [ (t.clientX-rect.left)*(cv.width/rect.width), (t.clientY-rect.top)*(cv.height/rect.height) ];
+}
+function start(e){
+  if(e.touches&&e.touches.length>1) return; // multi-touch = zoom/pan
+  drawing=true; moved=false;
+  undoStack.push(coll.map(r=>r.slice())); if(undoStack.length>40)undoStack.shift();
+  const [x,y]=evtPos(e); applyAt(x,y); draw();
+  e.preventDefault();
+}
+function move(e){
+  if(!drawing) return;
+  if(e.touches&&e.touches.length>1){ drawing=false; return; }
+  const [x,y]=evtPos(e); applyAt(x,y); draw(); moved=true;
+  e.preventDefault();
+}
+function end(){ if(drawing){ drawing=false; updateCounts(); } }
+
+cv.addEventListener('mousedown',start); cv.addEventListener('mousemove',move); window.addEventListener('mouseup',end);
+cv.addEventListener('touchstart',start,{passive:false}); cv.addEventListener('touchmove',move,{passive:false}); window.addEventListener('touchend',end);
+
+function setMode(m){ mode=m; painting=true;
+  document.getElementById('paint').classList.add('on');
+  document.getElementById('erase').classList.remove('on');
+  document.getElementById('mRock').classList.toggle('on',m==='rock');
+  document.getElementById('mWater').classList.toggle('on',m==='water');
+  document.getElementById('mClear').classList.toggle('on',m==='clear');
+}
+document.getElementById('mRock').onclick=()=>setMode('rock');
+document.getElementById('mWater').onclick=()=>setMode('water');
+document.getElementById('mClear').onclick=()=>setMode('clear');
+document.getElementById('paint').onclick=function(){ painting=true; this.classList.add('on'); document.getElementById('erase').classList.remove('on'); };
+document.getElementById('erase').onclick=function(){ painting=false; this.classList.add('on'); document.getElementById('paint').classList.remove('on'); };
+document.getElementById('overlayBtn').onclick=function(){ showOverlay=!showOverlay; this.classList.toggle('on',showOverlay); draw(); };
+document.getElementById('undo').onclick=()=>{ if(undoStack.length){ coll=undoStack.pop(); draw(); updateCounts(); } };
+document.getElementById('b1').onclick=function(){ brush=1; setBrush(this); };
+document.getElementById('b2').onclick=function(){ brush=3; setBrush(this); };
+document.getElementById('b3').onclick=function(){ brush=5; setBrush(this); };
+function setBrush(b){ ['b1','b2','b3'].forEach(id=>document.getElementById(id).classList.remove('on')); b.classList.add('on'); }
+
+document.getElementById('autoWater').onclick=()=>{
+  undoStack.push(coll.map(r=>r.slice()));
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const img=(grid[y][x]||'').split(':')[0];
+    if(img==='w1'||img==='w2'||img.startsWith('rv')||img.startsWith('wc')) coll[y][x]=1;
+  }
+  draw(); updateCounts();
+};
+document.getElementById('clearRock').onclick=()=>{
+  undoStack.push(coll.map(r=>r.slice()));
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){ if(coll[y][x]===2) coll[y][x]=0; }
+  draw(); updateCounts();
+};
+document.getElementById('clearAll').onclick=()=>{
+  undoStack.push(coll.map(r=>r.slice()));
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++) coll[y][x]=0;
+  draw(); updateCounts();
+};
+
+document.getElementById('save').onclick=()=>{
+  // speed: kaya=65, diger=100
+  const speed=coll.map(row=>row.map(c=> c===2?65:100 ));
+  const mapOut={ w:W,h:H,ts:TS, grid:grid, collision:coll };
+  const terrOut={ w:W,h:H, collision:coll, speed:speed };
+  dl('ra1_map.json', JSON.stringify(mapOut));
+  setTimeout(()=>dl('ra1_terrain.json', JSON.stringify(terrOut)), 300);
+};
+function dl(name,txt){
+  const b=new Blob([txt],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+}
+
+load();
+</script>
+</body>
+</html>
