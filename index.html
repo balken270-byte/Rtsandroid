@@ -19,7 +19,7 @@
   #pauseOverlay.show { display:flex; }
   #pauseOverlay h1 { font-size:28px; }
   #pauseOverlay button { background:#2c6fa3; color:#fff; border:none; border-radius:12px; padding:14px 32px; font-size:18px; }
-</style></head><body><div id="hud">RTS <b>v4.5</b> — Denge güncellemesi · <b>build 19 - arazi+olcek</b></div>
+</style></head><body><div id="hud">RTS <b>v4.5</b> — Denge güncellemesi · <b>build 20 - spawn+nav</b></div>
 <div id="build">
   <button id="bTank" class="active">🔧 Tank<br>100</button>
   <button id="bHeli">🚁 Heli<br>150</button>
@@ -61,8 +61,8 @@ const BRAD_M240="assets/images/bradley/bradley_m240.png";
 const BRAD_FIRE=["assets/images/bradley/fire_01.png","assets/images/bradley/fire_02.png","assets/images/bradley/fire_03.png","assets/images/bradley/fire_04.png","assets/images/bradley/fire_05.png","assets/images/bradley/fire_06.png"];
 // Bradley boyutlari (gercek olculere gore: tankin ~%85'i)
 const BRAD_HULL_W=127, BRAD_HULL_H=239, BRAD_TUR_W=179, BRAD_TUR_H=180;
-const BRAD_SCALE=0.1342;       // govde olcegi - yeni haritaya göre küçültüldü
-const BRAD_TUR_SCALE=0.0585;    // kule olcegi
+const BRAD_SCALE=0.1114;       // govde olcegi - yeni haritaya göre küçültüldü
+const BRAD_TUR_SCALE=0.0486;    // kule olcegi
 const BRAD_COST=130;
 
 // === M1126 STRYKER ASSETS (8x8 APC, .50cal RWS) ===
@@ -71,9 +71,9 @@ const STR_TURRET="assets/images/stryker/turret.png";
 const STR_MG="assets/images/stryker/mg.png";
 const STR_FIRE=["assets/images/stryker/fire_03.png","assets/images/stryker/fire_04.png"];
 const STR_HULL_W=304, STR_HULL_H=631, STR_TUR_W=174, STR_TUR_H=252, STR_MG_W=38, STR_MG_H=259;
-const STR_SCALE=0.053;       // govde olcegi - yeni haritaya göre küçültüldü
-const STR_TUR_SCALE=0.0413;    // kule olcegi
-const STR_MG_SCALE=0.0328;     // namlu olcegi
+const STR_SCALE=0.044;       // govde olcegi - yeni haritaya göre küçültüldü
+const STR_TUR_SCALE=0.0343;    // kule olcegi
+const STR_MG_SCALE=0.0272;     // namlu olcegi
 const STR_TURRET_FWD=-0.12;   // kule govde merkezinden ileri/geri offset
 const STR_TURRET_RIGHT=0.13;  // kule saga offset
 const STR_TUR_PIVOT=0.718;    // kule donme merkezi (gorsel alttan orani)
@@ -324,9 +324,9 @@ function playStrFire(vol){
   src.connect(g);g.connect(audioCtx.destination);src.start();
   src.stop(audioCtx.currentTime+0.18); // tek atis icin kisa kes
 }
-const SCALE=0.0585;
+const SCALE=0.0486;
 const GROUND_TILE=512;const GROUND_SCALE=0.28;
-const FAC_SCALE=0.1248;   // kışla ölçeği küçültüldü
+const FAC_SCALE=0.1036;   // kışla ölçeği küçültüldü
 const MAP_W=2208,MAP_H=1320;
 const cam={x:0,y:0,zoom:1.05}; // baslangic bakis acisi (daha yakin)
 const MIN_ZOOM=0.55, MAX_ZOOM=1.8; // uzaklastirma alt siniri yukseltildi (cok kuculmesin)
@@ -496,6 +496,22 @@ function terrCell(wx,wy){
   return D.grid[gy*ISLAND_GW+gx]===2?1:0;
 }
 function isRock(wx,wy){ return terrCell(wx,wy)===2; }
+// === GUVENLI DOGMA NOKTASI: en yakin gecilebilir kara hucre ===
+function findSpawnPoint(wx,wy){
+  // verilen nokta kara ise aynen don
+  if(!isWater(wx,wy)) return {x:wx,y:wy};
+  // spiral tarama: artan yaricapta cevreyi tara
+  const step=D_TW;
+  for(let r=1;r<=20;r++){
+    for(let a=0;a<16;a++){
+      const ang=a/16*Math.PI*2;
+      const nx=wx+Math.cos(ang)*r*step, ny=wy+Math.sin(ang)*r*step;
+      if(!isWater(nx,ny)) return {x:nx,y:ny};
+    }
+  }
+  return {x:wx,y:wy}; // bulunamadi (olmamali)
+}
+
 function isDeepWater(wx,wy){ return terrCell(wx,wy)===1; }
 // arazi hiz carpani: yol 1.5x, normal 1x, corak 0.65x
 function terrSpeedMul(wx,wy){
@@ -509,7 +525,7 @@ function terrSpeedMul(wx,wy){
 // === FLOW FIELD NAVİGASYON SİSTEMİ ===
 // Ada haritasında su engeli etrafında dolaşmayı sağlar
 // BFS tabanlı: her hücreye "hedefe giden en iyi yön" atar
-const FF_RES = 2; // Flow field çözünürlüğü (her 2 tile'da bir nokta)
+const FF_RES = 1; // RA1 ince yollar icin tile-bazli cozunurluk // Flow field çözünürlüğü (her 2 tile'da bir nokta)
 const FF_W = Math.ceil(D.MW / FF_RES);
 const FF_H = Math.ceil(D.MH / FF_RES);
 let _ffCache = new Map(); // hedef -> {field, ts} önbellek
@@ -1281,6 +1297,7 @@ function update(){
     if(factory.buildTimer>=buildTime){
       factory.buildTimer=0;factory.buildQueue.shift();
       const nt=curType==='chinook'?makeChinook(factory.x,factory.y+factory.h/2+50,'player'):curType==='heli'?makeHeli(factory.x,factory.y+factory.h/2+40,'player'):curType==='soldier'?makeSoldier(factory.x,factory.y+factory.h/2+25,'player'):curType==='bradley'?makeBradley(factory.x,factory.y+factory.h/2+35,'player'):curType==='stryker'?makeStryker(factory.x,factory.y+factory.h/2+35,'player'):makeTank(factory.x,factory.y+factory.h/2+30,'player');
+      if(nt.unitType!=='heli'&&nt.unitType!=='chinook'){const sp=findSpawnPoint(nt.x,nt.y);nt.x=sp.x;nt.y=sp.y;}
       nt.spawning=30;nt.tx=factory.rallyX;nt.ty=factory.rallyY;nt.hasOrder=true;
       tanks.push(nt);burst(nt.x,nt.y,'#7fff9f',16,4);
     }
@@ -1386,7 +1403,7 @@ function update(){
     }
     if(maker && enemyFactory.resources>=cost){
       enemyFactory.spawnTimer=0; enemyFactory.resources-=cost;
-      const nt=maker(enemyFactory.x,enemyFactory.y-enemyFactory.h/2-40,'enemy');
+      const nt=(()=>{const _n=maker(enemyFactory.x,enemyFactory.y-enemyFactory.h/2-40,'enemy'); if(_n&&_n.unitType!=='heli'&&_n.unitType!=='chinook'){const sp=findSpawnPoint(_n.x,_n.y);_n.x=sp.x;_n.y=sp.y;} return _n;})();
       // RWR: readyToMoveOut — spawning süresi, birim hemen koşmaz
       nt.spawning = 60 + Math.floor(Math.random()*60); // 1-2sn spawn koruması
       // Rally: kışla etrafında biraz farklı noktalara dağıl (targetGroundSpread)
@@ -1539,7 +1556,7 @@ function update(){
       // === KIYI GÜVENLİ MESAFE: sadece gerçekten su kenarındaysa ===
       // Flow field + ffCellCost zaten su kenarından kaçındırıyor
       // Burada sadece 1 tile mesafedeyse acil düzeltme yapılır
-      const coastImmediate = D_TW * 1.0;
+      const coastImmediate = D_TW * 1.5;
       const coastDirsImm = [[1,0],[-1,0],[0,1],[0,-1]];
       let coastBlocked = 0;
       for(const [cdx,cdy] of coastDirsImm){
