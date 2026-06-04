@@ -19,7 +19,7 @@
   #pauseOverlay.show { display:flex; }
   #pauseOverlay h1 { font-size:28px; }
   #pauseOverlay button { background:#2c6fa3; color:#fff; border:none; border-radius:12px; padding:14px 32px; font-size:18px; }
-</style></head><body><div id="hud">RTS <b>v4.5</b> — Denge güncellemesi · <b>build 25</b></div>
+</style></head><body><div id="hud">RTS <b>v4.5</b> — Denge güncellemesi · <b>build 26</b></div>
 <div id="build">
   <button id="bTank" class="active">🔧 Tank<br>100</button>
   <button id="bHeli">🚁 Heli<br>150</button>
@@ -426,7 +426,7 @@ window.addEventListener('load',()=>{
 
 // === KIŞLA (üretim binası) ===
 const factory={x:520,y:420, w:FAC_W*FAC_SCALE, h:FAC_H*FAC_SCALE, buildQueue:[], buildTimer:0, selected:false, rallyX:700, rallyY:620};
-const enemyFactory={x:1680,y:888,w:FAC_W*FAC_SCALE,h:FAC_H*FAC_SCALE,spawnTimer:0,resources:200};
+const enemyFactory={x:1488,y:960,w:FAC_W*FAC_SCALE,h:FAC_H*FAC_SCALE,spawnTimer:0,resources:200};
 
 // === YENİ KARO HARİTASI (Big Island - 180x180, 40 karo türü) ===
 let D={MW:92,MH:55,TW:24,grid:[]};
@@ -504,7 +504,7 @@ function findSpawnPoint(wx,wy){
   if(!isWater(wx,wy)) return {x:wx,y:wy};
   // spiral tarama: artan yaricapta cevreyi tara
   const step=D_TW;
-  for(let r=1;r<=20;r++){
+  for(let r=1;r<=35;r++){
     for(let a=0;a<16;a++){
       const ang=a/16*Math.PI*2;
       const nx=wx+Math.cos(ang)*r*step, ny=wy+Math.sin(ang)*r*step;
@@ -1067,7 +1067,7 @@ function setup(){
   spawnEnemyWave(2);
   cam.x=factory.x-VW/cam.zoom/2;cam.y=factory.y-VH/cam.zoom/2;clampCam();
 }
-function spawnEnemyWave(n){waveNum++;for(let i=0;i<n;i++){const sp=findSpawnPoint(enemyFactory.x+(Math.random()-0.5)*80, enemyFactory.y-enemyFactory.h/2-40-Math.random()*40); tanks.push(makeTank(sp.x,sp.y,'enemy'));}flashStatus(`⚔️ Düşman dalgası ${waveNum}! (${n} tank)`);}
+function spawnEnemyWave(n){waveNum++;for(let i=0;i<n;i++){const sp=findSpawnPoint(enemyFactory.x+(Math.random()-0.5)*60, enemyFactory.y+50+Math.random()*40); tanks.push(makeTank(sp.x,sp.y,'enemy'));}flashStatus(`⚔️ Düşman dalgası ${waveNum}! (${n} tank)`);}
 
 let statusFlash='',statusFlashT=0;
 function flashStatus(m){statusFlash=m;statusFlashT=180;}
@@ -1405,7 +1405,7 @@ function update(){
     }
     if(maker && enemyFactory.resources>=cost){
       enemyFactory.spawnTimer=0; enemyFactory.resources-=cost;
-      const nt=(()=>{const _n=maker(enemyFactory.x,enemyFactory.y-enemyFactory.h/2-40,'enemy'); if(_n&&_n.unitType!=='heli'&&_n.unitType!=='chinook'){const sp=findSpawnPoint(_n.x,_n.y);_n.x=sp.x;_n.y=sp.y;} return _n;})();
+      const nt=(()=>{const _n=maker(enemyFactory.x,enemyFactory.y+enemyFactory.h/2+40,'enemy'); if(_n&&_n.unitType!=='heli'&&_n.unitType!=='chinook'){const sp=findSpawnPoint(_n.x,_n.y);_n.x=sp.x;_n.y=sp.y;} return _n;})();
       // RWR: readyToMoveOut — spawning süresi, birim hemen koşmaz
       nt.spawning = 60 + Math.floor(Math.random()*60); // 1-2sn spawn koruması
       // Rally: kışla etrafında biraz farklı noktalara dağıl (targetGroundSpread)
