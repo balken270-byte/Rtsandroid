@@ -19,7 +19,7 @@
   #pauseOverlay.show { display:flex; }
   #pauseOverlay h1 { font-size:28px; }
   #pauseOverlay button { background:#2c6fa3; color:#fff; border:none; border-radius:12px; padding:14px 32px; font-size:18px; }
-</style></head><body><div id="hud">RTS <b>v4.5</b> — Denge güncellemesi · <b>build 18 - RA1 fetch</b></div>
+</style></head><body><div id="hud">RTS <b>v4.5</b> — Denge güncellemesi · <b>build 19 - arazi+olcek</b></div>
 <div id="build">
   <button id="bTank" class="active">🔧 Tank<br>100</button>
   <button id="bHeli">🚁 Heli<br>150</button>
@@ -61,8 +61,8 @@ const BRAD_M240="assets/images/bradley/bradley_m240.png";
 const BRAD_FIRE=["assets/images/bradley/fire_01.png","assets/images/bradley/fire_02.png","assets/images/bradley/fire_03.png","assets/images/bradley/fire_04.png","assets/images/bradley/fire_05.png","assets/images/bradley/fire_06.png"];
 // Bradley boyutlari (gercek olculere gore: tankin ~%85'i)
 const BRAD_HULL_W=127, BRAD_HULL_H=239, BRAD_TUR_W=179, BRAD_TUR_H=180;
-const BRAD_SCALE=0.172;       // govde olcegi - yeni haritaya göre küçültüldü
-const BRAD_TUR_SCALE=0.075;    // kule olcegi
+const BRAD_SCALE=0.1342;       // govde olcegi - yeni haritaya göre küçültüldü
+const BRAD_TUR_SCALE=0.0585;    // kule olcegi
 const BRAD_COST=130;
 
 // === M1126 STRYKER ASSETS (8x8 APC, .50cal RWS) ===
@@ -71,9 +71,9 @@ const STR_TURRET="assets/images/stryker/turret.png";
 const STR_MG="assets/images/stryker/mg.png";
 const STR_FIRE=["assets/images/stryker/fire_03.png","assets/images/stryker/fire_04.png"];
 const STR_HULL_W=304, STR_HULL_H=631, STR_TUR_W=174, STR_TUR_H=252, STR_MG_W=38, STR_MG_H=259;
-const STR_SCALE=0.068;       // govde olcegi - yeni haritaya göre küçültüldü
-const STR_TUR_SCALE=0.053;    // kule olcegi
-const STR_MG_SCALE=0.042;     // namlu olcegi
+const STR_SCALE=0.053;       // govde olcegi - yeni haritaya göre küçültüldü
+const STR_TUR_SCALE=0.0413;    // kule olcegi
+const STR_MG_SCALE=0.0328;     // namlu olcegi
 const STR_TURRET_FWD=-0.12;   // kule govde merkezinden ileri/geri offset
 const STR_TURRET_RIGHT=0.13;  // kule saga offset
 const STR_TUR_PIVOT=0.718;    // kule donme merkezi (gorsel alttan orani)
@@ -324,9 +324,9 @@ function playStrFire(vol){
   src.connect(g);g.connect(audioCtx.destination);src.start();
   src.stop(audioCtx.currentTime+0.18); // tek atis icin kisa kes
 }
-const SCALE=0.075;
+const SCALE=0.0585;
 const GROUND_TILE=512;const GROUND_SCALE=0.28;
-const FAC_SCALE=0.16;   // kışla ölçeği küçültüldü
+const FAC_SCALE=0.1248;   // kışla ölçeği küçültüldü
 const MAP_W=2208,MAP_H=1320;
 const cam={x:0,y:0,zoom:1.05}; // baslangic bakis acisi (daha yakin)
 const MIN_ZOOM=0.55, MAX_ZOOM=1.8; // uzaklastirma alt siniri yukseltildi (cok kuculmesin)
@@ -433,17 +433,24 @@ let D={MW:92,MH:55,TW:24,grid:[]};
 // === RA1 VERILERINI FETCH ILE YUKLE ===
 async function _loadRA1(){
   try{
-    const [tilesR, mapR] = await Promise.all([
+    const [tilesR, mapR, terrR] = await Promise.all([
       fetch('ra1_tiles.json').then(r=>r.json()),
-      fetch('ra1_map.json').then(r=>r.json())
+      fetch('ra1_map.json').then(r=>r.json()),
+      fetch('ra1_terrain.json').then(r=>r.json()).catch(()=>null)
     ]);
     RA1_TILES = tilesR;
     RA1_MAPGRID = mapR.grid;
     RA1_TS = mapR.ts || RA1_TS;
     // cizim grid (collision): mapR.collision 0=kara,1=su -> D.grid 1=kara,2=engel
-    const coll = mapR.collision;
+    const coll = (terrR&&terrR.collision)?terrR.collision:mapR.collision;
+    RA1_SPD = (terrR&&terrR.speed)?terrR.speed:null;
+    RA1_COLL = coll;
+    // D.grid: oyun formatinda 2=engel(su+kaya), diger=gecilir kara
     const g=[];
-    for(let y=0;y<mapR.h;y++)for(let x=0;x<mapR.w;x++){g.push(coll[y][x]===1?2:1);}
+    for(let y=0;y<mapR.h;y++)for(let x=0;x<mapR.w;x++){
+      const c=coll[y][x];
+      g.push((c===1||c===2)?2:1); // 1=su,2=kaya -> engel(2); 0=kara -> 1
+    }
     D.grid = g;
     // tile gorsellerini preload
     _ra1Total = Object.keys(RA1_TILES).length;
@@ -465,6 +472,7 @@ _loadRA1();
 let RA1_TILES={};
 let RA1_MAPGRID=[];
 let RA1_TS=24;
+let RA1_SPD=null; let RA1_COLL=null;
 const _ra1ImgCache={}; let _ra1Loaded=0; let _ra1Total=0;
 // RA1 verileri fetch ile yuklenecek (init() icinde)
 
@@ -479,6 +487,24 @@ function islandAt(wx,wy){
 }
 function isWater(wx,wy){return islandAt(wx,wy)===0;}
 function isLand(wx,wy){return islandAt(wx,wy)===1;}
+
+// === RA1 ARAZI YARDIMCILARI ===
+function terrCell(wx,wy){
+  const gx=Math.floor(wx/D_TW), gy=Math.floor(wy/D_TW);
+  if(gx<0||gx>=ISLAND_GW||gy<0||gy>=ISLAND_GH)return 1; // disari = su
+  if(RA1_COLL && RA1_COLL[gy]) return RA1_COLL[gy][gx]; // 0 kara,1 su,2 kaya
+  return D.grid[gy*ISLAND_GW+gx]===2?1:0;
+}
+function isRock(wx,wy){ return terrCell(wx,wy)===2; }
+function isDeepWater(wx,wy){ return terrCell(wx,wy)===1; }
+// arazi hiz carpani: yol 1.5x, normal 1x, corak 0.65x
+function terrSpeedMul(wx,wy){
+  if(!RA1_SPD) return 1;
+  const gx=Math.floor(wx/D_TW), gy=Math.floor(wy/D_TW);
+  if(gx<0||gx>=ISLAND_GW||gy<0||gy>=ISLAND_GH)return 1;
+  const s=(RA1_SPD[gy]&&RA1_SPD[gy][gx])||100;
+  return s/100;
+}
 
 // === FLOW FIELD NAVİGASYON SİSTEMİ ===
 // Ada haritasında su engeli etrafında dolaşmayı sağlar
@@ -1653,7 +1679,7 @@ function update(){
         const maxV=Math.min(STATS.maxTurn,Math.abs(diff)*0.5+0.005);const desired=Math.sign(diff)*maxV;
         t.hullTurnVel+=(desired-t.hullTurnVel)*0.25;
         if(Math.abs(diff)<0.03){t.hullAngle=targetH;t.hullTurnVel=0;}else t.hullAngle+=t.hullTurnVel;
-        if(Math.abs(diff)<STATS.alignTolerance){const spd=t.speed||STATS.moveSpeed;t.x+=Math.cos(t.hullAngle)*spd;t.y+=Math.sin(t.hullAngle)*spd;t.trackPhase+=0.25;if(time%5===0)tracks.push({x:t.x,y:t.y,a:t.hullAngle,life:1});}
+        if(Math.abs(diff)<STATS.alignTolerance){let spd=t.speed||STATS.moveSpeed; if(t.unitType!=='heli'&&t.unitType!=='chinook'){spd*=terrSpeedMul(t.x,t.y);} t.x+=Math.cos(t.hullAngle)*spd;t.y+=Math.sin(t.hullAngle)*spd;t.trackPhase+=0.25;if(time%5===0)tracks.push({x:t.x,y:t.y,a:t.hullAngle,life:1});}
       }else{
         t.hullTurnVel*=0.7;
         const realDd=Math.hypot(t.tx-t.x,t.ty-t.y);
