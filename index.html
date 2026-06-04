@@ -19,7 +19,7 @@
   #pauseOverlay.show { display:flex; }
   #pauseOverlay h1 { font-size:28px; }
   #pauseOverlay button { background:#2c6fa3; color:#fff; border:none; border-radius:12px; padding:14px 32px; font-size:18px; }
-</style></head><body><div id="hud">RTS <b>v4.5</b> — Denge güncellemesi · <b>build 26</b></div>
+</style></head><body><div id="hud">RTS <b>v4.5</b> — Denge güncellemesi · <b>build 27 - AI</b></div>
 <div id="build">
   <button id="bTank" class="active">🔧 Tank<br>100</button>
   <button id="bHeli">🚁 Heli<br>150</button>
@@ -1308,7 +1308,25 @@ function update(){
   for(const b of bullets){let best=null,bd=999;for(const t of tanks){if(t.alive&&t.team!==b.team){const d=dist(b.x,b.y,t.x,t.y);if(d<bd&&d<60){bd=d;best=t;}}}if(best)best.incomingDmg+=b.dmg;}
   // düşman kışlası tank üretir
   // DALGA HALİNDE SALDIRI: yeterli birim biriktiyse toplu saldır
-  enemyFactory.waveSize=enemyFactory.waveSize||3; // RWR: küçük gruplarla sürekli saldırı
+  enemyFactory.waveSize=enemyFactory.waveSize||3;
+  // === DINAMIK AI: savunma/saldiri dengesi ===
+  const allEnemy=tanks.filter(t=>t.alive&&t.team==='enemy');
+  const allPlayer=tanks.filter(t=>t.alive&&t.team==='player');
+  // us yakininda (350px) oyuncu birimi var mi? -> savunma modu
+  const threats=allPlayer.filter(p=>dist(p.x,p.y,enemyFactory.x,enemyFactory.y)<350);
+  enemyFactory._defending = threats.length>0;
+  // dinamik dalga boyutu: dusman cok birime sahipse buyuk grup, az ise bekle-biriktir
+  if(allEnemy.length>=8) enemyFactory.waveSize=5;
+  else if(allEnemy.length>=5) enemyFactory.waveSize=4;
+  else enemyFactory.waveSize=3;
+  // SAVUNMA: us tehdit altindaysa bos birimleri usse cek
+  if(enemyFactory._defending){
+    const defenders=allEnemy.filter(t=>!t.hasOrder&&!t.focusTarget);
+    for(const t of defenders){
+      const tgt=threats[0];
+      t.tx=tgt.x; t.ty=tgt.y; t.hasOrder=true;
+    }
+  }
   const reserves=tanks.filter(t=>t.alive&&t.team==='enemy'&&!t.focusTarget&&!t.hasOrder);
 
   // RWR skirmish AI: birimler rally'de BEKLER, yeterli birikince saldırır
@@ -1423,6 +1441,20 @@ function update(){
   // dalga sistemi kaldırıldı - düşman artık kışladan üretiyor
   if(enemyAlive===0&&waveNum===0){spawnEnemyWave(2);}
   for(const t of tanks){
+    // === OTOMATIK GERI CEKILME (oyuncu kara birimleri) ===
+    if(t.alive && t.team==='player' && t.unitType!=='heli' && t.unitType!=='chinook'){
+      const lowHp = t.hp < t.maxHp*0.25;
+      if(lowHp && t.incomingDmg>0 && !t.selected){
+        // usse dogru cekil
+        t._retreating=true;
+        t.tx=factory.x; t.ty=factory.y+factory.h/2+60; t.hasOrder=true; t.focusTarget=null;
+      } else if(t._retreating && t.hp > t.maxHp*0.6){
+        t._retreating=false; t.hasOrder=false;
+      }
+      // us yakininda yavas tamir (RA1 tamirhane mantigi)
+      const dHome=dist(t.x,t.y,factory.x,factory.y);
+      if(dHome < 180 && t.hp < t.maxHp){ t.hp=Math.min(t.maxHp, t.hp+0.15); }
+    }
     if(!t.alive){if(t.deadTimer===0)wrecks.push({x:t.x,y:t.y,a:t.hullAngle,fade:1,unitType:t.unitType,team:t.team});t.deadTimer++;t.smokeTimer++;if(t.deadTimer<120&&t.smokeTimer%6===0)smoke(t.x+(Math.random()-0.5)*18,t.y-8,true);continue;}
     if(t.spawning>0)t.spawning--;
     t.idlePhase+=0.04;
