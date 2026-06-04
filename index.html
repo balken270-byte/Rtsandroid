@@ -19,7 +19,7 @@
   #pauseOverlay.show { display:flex; }
   #pauseOverlay h1 { font-size:28px; }
   #pauseOverlay button { background:#2c6fa3; color:#fff; border:none; border-radius:12px; padding:14px 32px; font-size:18px; }
-</style></head><body><div id="hud">RTS <b>v4.5</b> — Denge güncellemesi · <b>build 20 - spawn+nav</b></div>
+</style></head><body><div id="hud">RTS <b>v4.5</b> — Denge güncellemesi · <b>build 23 - zoom</b></div>
 <div id="build">
   <button id="bTank" class="active">🔧 Tank<br>100</button>
   <button id="bHeli">🚁 Heli<br>150</button>
@@ -328,8 +328,8 @@ const SCALE=0.0486;
 const GROUND_TILE=512;const GROUND_SCALE=0.28;
 const FAC_SCALE=0.1036;   // kışla ölçeği küçültüldü
 const MAP_W=2208,MAP_H=1320;
-const cam={x:0,y:0,zoom:1.05}; // baslangic bakis acisi (daha yakin)
-const MIN_ZOOM=0.55, MAX_ZOOM=1.8; // uzaklastirma alt siniri yukseltildi (cok kuculmesin)
+const cam={x:0,y:0,zoom:1.5}; // baslangic bakis acisi (daha yakin)
+const MIN_ZOOM=0.32, MAX_ZOOM=2.0; // uzaklastirma alt siniri yukseltildi (cok kuculmesin)
 function clampCam(){cam.x=Math.max(0,Math.min(MAP_W-VW/cam.zoom,cam.x));cam.y=Math.max(0,Math.min(MAP_H-VH/cam.zoom,cam.y));}
 function w2s(wx,wy){return [(wx-cam.x)*cam.zoom,(wy-cam.y)*cam.zoom];}
 function s2w(sx,sy){return [sx/cam.zoom+cam.x,sy/cam.zoom+cam.y];}
@@ -337,7 +337,7 @@ function s2w(sx,sy){return [sx/cam.zoom+cam.x,sy/cam.zoom+cam.y];}
 // mode kaldırıldı - tek parmak hep seçim/komut
 // kontroller: tek parmak=seç/komut, iki parmak=gez/zoom
 
-const STATS={maxHp:220,dmg:34,moveSpeed:1.0,maxTurn:0.045,turretMaxTurn:0.05,range:420,fireRate:70,accuracyNear:0.95,accuracyFar:0.45,radius:26,alignTolerance:0.18,bulletSpeed:8}; // RWR: tank radius=11, oranlandı
+const STATS={maxHp:220,dmg:34,moveSpeed:0.6,maxTurn:0.045,turretMaxTurn:0.05,range:252,fireRate:70,accuracyNear:0.95,accuracyFar:0.45,radius:26,alignTolerance:0.18,bulletSpeed:5}; // RWR: tank radius=11, oranlandı
 let resources=1000;
 let buildType='tank';
 const HELI_COST=150;
@@ -1001,7 +1001,7 @@ function makeHeli(x,y,team){
     rotorAngle:Math.random()*6,
     selected:false,alive:true,deadTimer:0,smokeTimer:0,hasOrder:false,spawning:0,incomingDmg:0,
     // heli özel: hızlı, kirilgan (dusuk can), ucar
-    speed:2.2,range:420,dmg:9,fireRate:18,bobPhase:Math.random()*6,rocketCD:Math.random()*150,focusTarget:null,homeX:x,homeY:y,faceDir:undefined};
+    speed:0.782,range:252,dmg:9,fireRate:18,bobPhase:Math.random()*6,rocketCD:Math.random()*150,focusTarget:null,homeX:x,homeY:y,faceDir:undefined};
 }
 // CH-47 CHINOOK (ağır nakliye helikopteri) - silahsız, taşıyıcı
 function makeChinook(x,y,team){
@@ -1012,7 +1012,7 @@ function makeChinook(x,y,team){
     fireCooldown:0,recoil:0,muzzle:0,
     selected:false,alive:true,deadTimer:0,smokeTimer:0,hasOrder:false,spawning:0,incomingDmg:0,
     focusTarget:null,homeX:x,homeY:y,faceDir:undefined,
-    speed:1.8,range:0,dmg:0,fireRate:0,
+    speed:1.08,range:0,dmg:0,fireRate:0,
     cargo:[],maxCargo:8, // taşıyabileceği birim sayısı
     deployTimer:0,altitude:100,targetAltitude:100,rotorSpeed:0.55
   };
@@ -1025,7 +1025,7 @@ function makeSoldier(x,y,team){
     animState:'idle',animFrame:0,animTimer:0,flipX:false,
     selected:false,alive:true,deadTimer:0,smokeTimer:0,hasOrder:false,spawning:0,incomingDmg:0,
     focusTarget:null,homeX:x,homeY:y,faceDir:undefined,
-    speed:1.0*(0.88+Math.random()*0.24),range:360,dmg:7,fireRate:24,_navId:_navCounter++,_navDir:null,
+    speed:0.6*(0.88+Math.random()*0.24),range:216,dmg:7,fireRate:24,_navId:_navCounter++,_navDir:null,
     laneOx:(Math.random()-0.5)*STATS.radius*3.5, laneOy:(Math.random()-0.5)*STATS.radius*1.5}; // speedSpread + lane
 }
 // M2A3 BRADLEY (piyade savas araci) - cift silah: 25mm top + M240 makineli
@@ -1037,7 +1037,7 @@ function makeBradley(x,y,team){
     selected:false,alive:true,deadTimer:0,smokeTimer:0,hasOrder:false,spawning:0,incomingDmg:0,
     focusTarget:null,homeX:x,homeY:y,faceDir:undefined,
     // Bradley istatistikleri (dengeli savasci - 25mm ana + M240 ikincil)
-    speed:1.3,range:440,dmg:16,fireRate:34,
+    speed:0.78,range:264,dmg:16,fireRate:34,
     mgRange:300,mgDmg:4,mgFireRate:9,_navId:_navCounter++,_navDir:null,
     laneOx:(Math.random()-0.5)*STATS.radius*3.5, laneOy:(Math.random()-0.5)*STATS.radius*1.5};
 }
@@ -1050,7 +1050,7 @@ function makeStryker(x,y,team){
     selected:false,alive:true,deadTimer:0,smokeTimer:0,hasOrder:false,spawning:0,incomingDmg:0,
     focusTarget:null,homeX:x,homeY:y,faceDir:undefined,
     // Stryker istatistikleri (INI: HP310->180 denge, menzil365, .50cal AP hasar)
-    speed:1.6,range:365,dmg:8,fireRate:12,
+    speed:0.96,range:219,dmg:8,fireRate:12,
     cargo:[],maxCargo:8,_navId:_navCounter++,_navDir:null,
     laneOx:(Math.random()-0.5)*STATS.radius*3.5, laneOy:(Math.random()-0.5)*STATS.radius*1.5}; // APC: 8 asker tasir
 }
@@ -1696,7 +1696,7 @@ function update(){
         const maxV=Math.min(STATS.maxTurn,Math.abs(diff)*0.5+0.005);const desired=Math.sign(diff)*maxV;
         t.hullTurnVel+=(desired-t.hullTurnVel)*0.25;
         if(Math.abs(diff)<0.03){t.hullAngle=targetH;t.hullTurnVel=0;}else t.hullAngle+=t.hullTurnVel;
-        if(Math.abs(diff)<STATS.alignTolerance){let spd=t.speed||STATS.moveSpeed; if(t.unitType!=='heli'&&t.unitType!=='chinook'){spd*=terrSpeedMul(t.x,t.y);} t.x+=Math.cos(t.hullAngle)*spd;t.y+=Math.sin(t.hullAngle)*spd;t.trackPhase+=0.25;if(time%5===0)tracks.push({x:t.x,y:t.y,a:t.hullAngle,life:1});}
+        if(Math.abs(diff)<STATS.alignTolerance){let spd=t.speed||STATS.moveSpeed; const _air=(t.unitType==='heli'||t.unitType==='chinook'); if(!_air){spd*=terrSpeedMul(t.x,t.y);} const _nx=t.x+Math.cos(t.hullAngle)*spd, _ny=t.y+Math.sin(t.hullAngle)*spd; if(_air||!isWater(_nx,_ny)){t.x=_nx;t.y=_ny;} else if(!isWater(_nx,t.y)){t.x=_nx;} else if(!isWater(t.x,_ny)){t.y=_ny;}t.trackPhase+=0.25;if(time%5===0)tracks.push({x:t.x,y:t.y,a:t.hullAngle,life:1});}
       }else{
         t.hullTurnVel*=0.7;
         const realDd=Math.hypot(t.tx-t.x,t.ty-t.y);
@@ -2541,8 +2541,15 @@ function buildMinimapTerrainCache(mw, mh) {
   const cw = mw / ISLAND_GW, ch = mh / ISLAND_GH;
   for (let gy = 0; gy < ISLAND_GH; gy++) {
     for (let gx = 0; gx < ISLAND_GW; gx++) {
-      const t = D.grid[gy * ISLAND_GW + gx];
-      cc.fillStyle = t === 2 ? '#1d3a4a' : (t === 3 ? '#6b6358' : '#5a7048');
+      let col='#5a7048'; // kara yesil
+      if(RA1_COLL && RA1_COLL[gy]){
+        const c=RA1_COLL[gy][gx];
+        col = c===1 ? '#2a5a7a' : (c===2 ? '#6b6358' : '#5a7048'); // su mavi, kaya gri, kara yesil
+      } else {
+        const t = D.grid[gy * ISLAND_GW + gx];
+        col = t === 2 ? '#2a5a7a' : '#5a7048';
+      }
+      cc.fillStyle = col;
       cc.fillRect(gx * cw, gy * ch, cw + 0.5, ch + 0.5);
     }
   }
