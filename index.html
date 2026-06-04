@@ -19,7 +19,7 @@
   #pauseOverlay.show { display:flex; }
   #pauseOverlay h1 { font-size:28px; }
   #pauseOverlay button { background:#2c6fa3; color:#fff; border:none; border-radius:12px; padding:14px 32px; font-size:18px; }
-</style></head><body><div id="hud">RTS <b>v4.5</b> — Denge güncellemesi · <b>build 27 - AI</b></div>
+</style></head><body><div id="hud">RTS <b>v4.5</b> — Denge güncellemesi · <b>build 28 - 96x96 harita</b></div>
 <div id="build">
   <button id="bTank" class="active">🔧 Tank<br>100</button>
   <button id="bHeli">🚁 Heli<br>150</button>
@@ -327,7 +327,7 @@ function playStrFire(vol){
 const SCALE=0.0486;
 const GROUND_TILE=512;const GROUND_SCALE=0.28;
 const FAC_SCALE=0.1036;   // kışla ölçeği küçültüldü
-const MAP_W=2208,MAP_H=1320;
+const MAP_W=2304,MAP_H=2304;
 const cam={x:0,y:0,zoom:1.3}; // baslangic bakis acisi (daha yakin)
 const MIN_ZOOM=0.32, MAX_ZOOM=2.0; // uzaklastirma alt siniri yukseltildi (cok kuculmesin)
 function fitZoom(){ return Math.max(VW/MAP_W, VH/MAP_H); } // harita disi bosluk gorunmesin
@@ -425,11 +425,11 @@ window.addEventListener('load',()=>{
 });
 
 // === KIŞLA (üretim binası) ===
-const factory={x:520,y:420, w:FAC_W*FAC_SCALE, h:FAC_H*FAC_SCALE, buildQueue:[], buildTimer:0, selected:false, rallyX:700, rallyY:620};
-const enemyFactory={x:1488,y:960,w:FAC_W*FAC_SCALE,h:FAC_H*FAC_SCALE,spawnTimer:0,resources:200};
+const factory={x:504,y:264, w:FAC_W*FAC_SCALE, h:FAC_H*FAC_SCALE, buildQueue:[], buildTimer:0, selected:false, rallyX:560,rallyY:420};
+const enemyFactory={x:1584,y:1896,w:FAC_W*FAC_SCALE,h:FAC_H*FAC_SCALE,spawnTimer:0,resources:200};
 
 // === YENİ KARO HARİTASI (Big Island - 180x180, 40 karo türü) ===
-let D={MW:92,MH:55,TW:24,grid:[]};
+let D={MW:96,MH:96,TW:24,grid:[]};
 
 // === RA1 VERILERINI FETCH ILE YUKLE ===
 async function _loadRA1(){
