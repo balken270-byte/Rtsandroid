@@ -19,7 +19,7 @@
   #pauseOverlay.show { display:flex; }
   #pauseOverlay h1 { font-size:28px; }
   #pauseOverlay button { background:#2c6fa3; color:#fff; border:none; border-radius:12px; padding:14px 32px; font-size:18px; }
-</style></head><body><div id="hud">RTS <b>v4.5</b> — Denge güncellemesi · <b>build 23 - zoom</b></div>
+</style></head><body><div id="hud">RTS <b>v4.5</b> — Denge güncellemesi · <b>build 25</b></div>
 <div id="build">
   <button id="bTank" class="active">🔧 Tank<br>100</button>
   <button id="bHeli">🚁 Heli<br>150</button>
@@ -328,9 +328,10 @@ const SCALE=0.0486;
 const GROUND_TILE=512;const GROUND_SCALE=0.28;
 const FAC_SCALE=0.1036;   // kışla ölçeği küçültüldü
 const MAP_W=2208,MAP_H=1320;
-const cam={x:0,y:0,zoom:1.5}; // baslangic bakis acisi (daha yakin)
+const cam={x:0,y:0,zoom:1.3}; // baslangic bakis acisi (daha yakin)
 const MIN_ZOOM=0.32, MAX_ZOOM=2.0; // uzaklastirma alt siniri yukseltildi (cok kuculmesin)
-function clampCam(){cam.x=Math.max(0,Math.min(MAP_W-VW/cam.zoom,cam.x));cam.y=Math.max(0,Math.min(MAP_H-VH/cam.zoom,cam.y));}
+function fitZoom(){ return Math.max(VW/MAP_W, VH/MAP_H); } // harita disi bosluk gorunmesin
+function clampCam(){const fz=fitZoom(); if(cam.zoom<fz)cam.zoom=fz; cam.x=Math.max(0,Math.min(MAP_W-VW/cam.zoom,cam.x));cam.y=Math.max(0,Math.min(MAP_H-VH/cam.zoom,cam.y));}
 function w2s(wx,wy){return [(wx-cam.x)*cam.zoom,(wy-cam.y)*cam.zoom];}
 function s2w(sx,sy){return [sx/cam.zoom+cam.x,sy/cam.zoom+cam.y];}
 
@@ -460,6 +461,7 @@ async function _loadRA1(){
       im.src=RA1_TILES[k]; _ra1ImgCache[k]=im;
     }
     try{if(typeof _groundChunks!=='undefined')_groundChunks.clear();}catch(e){}
+    _minimapTerrainCache=null; // minimap RA1 sekliyle yeniden cizilsin
     console.log('RA1 yuklendi: '+_ra1Total+' tile, harita '+mapR.w+'x'+mapR.h);
   }catch(e){
     console.error('RA1 yukleme hatasi', e);
@@ -1061,11 +1063,11 @@ function setup(){
   factory.buildQueue=[];factory.buildTimer=0;
   genObstacles();
   genGroundDetails();
-  for(let i=0;i<3;i++)tanks.push(makeTank(factory.x+200+(i%2)*80,factory.y+200+Math.floor(i/2)*100,'player'));
+  for(let i=0;i<3;i++){const sp=findSpawnPoint(factory.x+(i%2)*60-30,factory.y+factory.h/2+40+Math.floor(i/2)*50);const u=makeTank(sp.x,sp.y,'player');tanks.push(u);}
   spawnEnemyWave(2);
   cam.x=factory.x-VW/cam.zoom/2;cam.y=factory.y-VH/cam.zoom/2;clampCam();
 }
-function spawnEnemyWave(n){waveNum++;for(let i=0;i<n;i++){const ex=enemyFactory.x-200-Math.random()*300,ey=enemyFactory.y-200-Math.random()*300;tanks.push(makeTank(ex,ey,'enemy'));}flashStatus(`⚔️ Düşman dalgası ${waveNum}! (${n} tank)`);}
+function spawnEnemyWave(n){waveNum++;for(let i=0;i<n;i++){const sp=findSpawnPoint(enemyFactory.x+(Math.random()-0.5)*80, enemyFactory.y-enemyFactory.h/2-40-Math.random()*40); tanks.push(makeTank(sp.x,sp.y,'enemy'));}flashStatus(`⚔️ Düşman dalgası ${waveNum}! (${n} tank)`);}
 
 let statusFlash='',statusFlashT=0;
 function flashStatus(m){statusFlash=m;statusFlashT=180;}
@@ -1188,7 +1190,7 @@ canvas.addEventListener('pointermove',e=>{
   if(!pointers.has(e.pointerId))return;pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
   // MINIMAP surukleme: kamera takip etsin
   if(minimapDragging){minimapJump(e.clientX,e.clientY);return;}
-  if(pointers.size===2&&pinchStart){const p=[...pointers.values()];const d=Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y);const mid={x:(p[0].x+p[1].x)/2,y:(p[0].y+p[1].y)/2};cam.zoom=Math.max(MIN_ZOOM,Math.min(MAX_ZOOM,pinchStart.zoom*(d/pinchStart.d)));if(pinchStart.mid){cam.x+=(pinchStart.mid.x-mid.x)/cam.zoom;cam.y+=(pinchStart.mid.y-mid.y)/cam.zoom;}pinchStart.mid=mid;clampCam();didDrag=true;}
+  if(pointers.size===2&&pinchStart){const p=[...pointers.values()];const d=Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y);const mid={x:(p[0].x+p[1].x)/2,y:(p[0].y+p[1].y)/2};cam.zoom=Math.max(Math.max(MIN_ZOOM,fitZoom()),Math.min(MAX_ZOOM,pinchStart.zoom*(d/pinchStart.d)));if(pinchStart.mid){cam.x+=(pinchStart.mid.x-mid.x)/cam.zoom;cam.y+=(pinchStart.mid.y-mid.y)/cam.zoom;}pinchStart.mid=mid;clampCam();didDrag=true;}
   else if(pointers.size===1&&dragStart){
     const dx=e.clientX-dragStart.x,dy=e.clientY-dragStart.y;
     if(Math.abs(dx)>6||Math.abs(dy)>6){didDrag=true;if(holdTimer&&!selectMode){clearTimeout(holdTimer);holdTimer=null;}}
