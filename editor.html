@@ -2,261 +2,260 @@
 <html lang="tr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=4, user-scalable=yes">
-<title>RA1 Harita Çarpışma Editörü</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>RA1 Çarpışma Editörü</title>
 <style>
-  :root{ --bg:#11161c; --panel:#1b232c; --line:#2c3742; --txt:#dce4ec; --accent:#4fb0ff; --rock:#b94ff0; --water:#ff4f5e; }
-  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
-  body{margin:0;background:var(--bg);color:var(--txt);font-family:'Trebuchet MS',system-ui,sans-serif;}
-  header{position:sticky;top:0;z-index:10;background:var(--panel);border-bottom:1px solid var(--line);padding:8px 10px;}
-  h1{font-size:15px;margin:0 0 6px;letter-spacing:.5px;}
-  .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
-  button{background:#243140;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px 11px;font-size:13px;font-weight:bold;cursor:pointer;}
-  button:active{transform:scale(.96);}
-  button.on{background:var(--accent);color:#06121f;border-color:var(--accent);}
-  .mode-rock.on{background:var(--rock);border-color:var(--rock);color:#fff;}
-  .mode-water.on{background:var(--water);border-color:var(--water);color:#fff;}
-  .mode-clear.on{background:#3ad17a;border-color:#3ad17a;color:#06121f;}
-  .hint{font-size:11px;color:#8aa0b4;margin-top:5px;line-height:1.4;}
-  #wrap{overflow:hidden;width:100vw;height:calc(100vh - 175px);background:#0a0e13;position:relative;touch-action:none;}
-  canvas{display:block;image-rendering:pixelated;position:absolute;top:0;left:0;transform-origin:0 0;}
-  .stat{font-size:11px;color:#8aa0b4;}
-  .pill{padding:2px 7px;border-radius:10px;font-size:11px;font-weight:bold;}
-  .pill.rock{background:var(--rock);color:#fff;}
-  .pill.water{background:var(--water);color:#fff;}
-  .pill.clear{background:#3ad17a;color:#06121f;}
-  textarea{width:100%;height:80px;background:#0a0e13;color:#7fd0ff;border:1px solid var(--line);border-radius:8px;font-size:10px;font-family:monospace;margin-top:6px;display:none;}
+  :root{--bg:#0d1218;--panel:#161e27;--line:#28333f;--txt:#e3eaf2;--mut:#7e93a6;
+        --rock:#b14ff0;--water:#ff5066;--clear:#35d985;--accent:#37a0ff;}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0;}
+  html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);
+    font-family:'Trebuchet MS',system-ui,sans-serif;}
+  #app{display:flex;flex-direction:column;height:100vh;}
+
+  /* ÜST: araç çubuğu */
+  .topbar{background:var(--panel);border-bottom:1px solid var(--line);padding:7px 9px;flex:0 0 auto;}
+  .title{font-size:13px;font-weight:bold;letter-spacing:.4px;margin-bottom:7px;color:#cfe1f2;display:flex;align-items:center;gap:7px;}
+  .title small{font-weight:normal;color:var(--mut);font-size:11px;}
+  .tools{display:flex;gap:6px;}
+  .tool{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;
+    background:#1d2731;border:1.5px solid var(--line);border-radius:11px;padding:9px 4px;cursor:pointer;transition:.12s;}
+  .tool .ic{font-size:19px;line-height:1;}
+  .tool .lb{font-size:10.5px;color:var(--mut);font-weight:bold;}
+  .tool:active{transform:scale(.95);}
+  .tool.sel{border-width:2px;}
+  .tool.rock.sel{border-color:var(--rock);background:rgba(177,79,240,.16);}
+  .tool.rock.sel .lb{color:var(--rock);}
+  .tool.water.sel{border-color:var(--water);background:rgba(255,80,102,.16);}
+  .tool.water.sel .lb{color:var(--water);}
+  .tool.clear.sel{border-color:var(--clear);background:rgba(53,217,133,.16);}
+  .tool.clear.sel .lb{color:var(--clear);}
+
+  /* ORTA: harita alanı */
+  #stage{position:relative;flex:1 1 auto;overflow:hidden;background:
+    radial-gradient(circle at 50% 40%,#11202c,#070b10);}
+  canvas{position:absolute;top:0;left:0;transform-origin:0 0;image-rendering:pixelated;
+    box-shadow:0 0 0 1px rgba(255,255,255,.08),0 8px 40px rgba(0,0,0,.6);}
+
+  /* SAĞ: zoom dikey bar */
+  .zoombar{position:absolute;top:50%;right:10px;transform:translateY(-50%);
+    display:flex;flex-direction:column;gap:7px;z-index:5;}
+  .zoombar button{width:46px;height:46px;border-radius:13px;border:1px solid var(--line);
+    background:rgba(22,30,39,.92);color:var(--txt);font-size:20px;font-weight:bold;
+    cursor:pointer;backdrop-filter:blur(6px);box-shadow:0 3px 12px rgba(0,0,0,.4);}
+  .zoombar button:active{transform:scale(.9);background:var(--accent);color:#04121f;}
+  .zoombar .zlabel{font-size:10px;text-align:center;color:var(--mut);font-weight:bold;}
+
+  /* ALT: kaydırma + aksiyon barı */
+  .bottombar{background:var(--panel);border-top:1px solid var(--line);
+    padding:8px 9px;flex:0 0 auto;display:flex;flex-direction:column;gap:7px;}
+  .panrow{display:flex;align-items:center;gap:9px;}
+  .pan-pad{flex:1;display:grid;grid-template-columns:repeat(4,1fr);gap:5px;}
+  .pan-pad button,.actrow button{height:40px;border-radius:10px;border:1px solid var(--line);
+    background:#1d2731;color:var(--txt);font-size:14px;font-weight:bold;cursor:pointer;}
+  .pan-pad button:active,.actrow button:active{transform:scale(.94);background:#26333f;}
+  .actrow{display:flex;gap:5px;}
+  .actrow button{flex:1;font-size:12px;}
+  .actrow .save{background:var(--accent);color:#04121f;border-color:var(--accent);flex:1.3;}
+  .actrow .danger{color:#ff9b6b;}
+  .counts{display:flex;gap:5px;justify-content:center;}
+  .pill{padding:3px 9px;border-radius:11px;font-size:11px;font-weight:bold;}
+  .pill.c{background:rgba(53,217,133,.18);color:var(--clear);}
+  .pill.w{background:rgba(255,80,102,.18);color:var(--water);}
+  .pill.r{background:rgba(177,79,240,.18);color:var(--rock);}
+  .seg{display:flex;gap:4px;}
+  .seg button{padding:6px 9px;border-radius:9px;border:1px solid var(--line);background:#1d2731;
+    color:var(--mut);font-size:11px;font-weight:bold;cursor:pointer;}
+  .seg button.on{background:var(--accent);color:#04121f;border-color:var(--accent);}
+  .hint{font-size:10px;color:var(--mut);text-align:center;line-height:1.4;}
 </style>
 </head>
 <body>
-<header>
-  <h1>🗺️ RA1 Çarpışma Editörü</h1>
-  <div class="row">
-    <button id="mRock" class="mode-rock on">🟪 Kaya (engel)</button>
-    <button id="mWater" class="mode-water">🟥 Su (engel)</button>
-    <button id="mClear" class="mode-clear">🟩 Geçilebilir</button>
-  </div>
-  <div class="row" style="margin-top:6px;">
-    <button id="paint" class="on">✏️ Boya</button>
-    <button id="erase">🧽 Sadece geçilebilir yap</button>
-    <button id="overlayBtn" class="on">👁️ Renk göster</button>
-    <button id="undo">↩️ Geri al</button>
-    <button id="save">💾 Kaydet (indir)</button>
-  </div>
-  <div class="row" style="margin-top:6px;">
-    <button id="autoWater">💧 Suyu otomatik bul</button>
-    <button id="clearRock">🧹 Kayaları sıfırla</button>
-    <button id="clearAll">⬜ Hepsini geçilebilir</button>
-  </div>
-  <div class="row" style="margin-top:6px;">
-    <button id="panMode">✋ Kaydır modu</button>
-    <button id="zoomOut">➖ Uzaklaş</button>
-    <button id="zoomIn">➕ Yakınlaş</button>
-    <button id="fit">⊡ Sığdır</button>
-  </div>
-  <div class="hint">
-    Boya modu açıkken haritaya <b>dokun/sürükle</b> → seçili tipi (kaya/su/geçilebilir) işaretler.
-    İki parmakla yakınlaştır/kaydır. Bitince <b>Kaydet</b> → güncel <b>ra1_map.json</b> + <b>ra1_terrain.json</b> iner.
-  </div>
-  <div class="row" style="margin-top:6px;">
-    <span class="stat">Fırça:</span>
-    <button id="b1" class="on">1×1</button><button id="b2">3×3</button><button id="b3">5×5</button>
-    <span class="stat" id="counts"></span>
-  </div>
-</header>
+<div id="app">
 
-<div id="wrap"><canvas id="cv"></canvas></div>
+  <div class="topbar">
+    <div class="title">🗺️ Çarpışma Editörü
+      <small id="status">yükleniyor…</small>
+    </div>
+    <div class="tools">
+      <div class="tool clear sel" id="tClear"><span class="ic">🟩</span><span class="lb">GEÇİLİR</span></div>
+      <div class="tool rock" id="tRock"><span class="ic">🟪</span><span class="lb">KAYA</span></div>
+      <div class="tool water" id="tWater"><span class="ic">🟦</span><span class="lb">SU</span></div>
+    </div>
+  </div>
+
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div class="zoombar">
+      <button id="zin">＋</button>
+      <div class="zlabel" id="zval">100%</div>
+      <button id="zout">－</button>
+      <button id="zfit" style="font-size:15px;">⊡</button>
+    </div>
+  </div>
+
+  <div class="bottombar">
+    <div class="panrow">
+      <div class="seg">
+        <button id="fSmall" class="on">●</button>
+        <button id="fMed">●●</button>
+        <button id="fBig">●●●</button>
+      </div>
+      <div class="pan-pad">
+        <button id="pL">⬅️</button>
+        <button id="pU">⬆️</button>
+        <button id="pD">⬇️</button>
+        <button id="pR">➡️</button>
+      </div>
+    </div>
+    <div class="counts" id="counts"></div>
+    <div class="actrow">
+      <button id="undo">↩️ Geri</button>
+      <button id="autoWater">💧 Su bul</button>
+      <button id="clearRock" class="danger">🧹 Kaya sil</button>
+    </div>
+    <div class="actrow">
+      <button id="saveMap" class="save">💾 map.json indir</button>
+      <button id="saveTerr" class="save">💾 terrain.json indir</button>
+    </div>
+    <div class="actrow">
+      <button id="saveMap">⬇️ Sadece map.json</button>
+      <button id="saveTerr">⬇️ Sadece terrain.json</button>
+    </div>
+    <div class="hint">Haritaya dokun/sürükle = boya · İki parmak = yakınlaştır · Oklar = kaydır</div>
+  </div>
+
+</div>
 
 <script>
-const TS=24;             // tile piksel (gercek)
-const VS=12;             // editorde gosterim olcegi (her tile VS px)
-let W=0,H=0, grid=[], coll=[], tileImg={}, ready=false;
-let mode='rock', painting=true, showOverlay=true, brush=1;
-let panMode=false, zoom=1, panX=0, panY=0;
-const undoStack=[];
-
-const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const TS=24, VS=14;
+let W=0,H=0,grid=[],coll=[],tileImg={},ready=false;
+let paintVal=0, brush=1, zoom=1, panX=0, panY=0;
+const undo=[];
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
 ctx.imageSmoothingEnabled=false;
-const wrap=document.getElementById('wrap');
+const stage=document.getElementById('stage');
 
-function applyTransform(){
-  cv.style.transform=`translate(${panX}px,${panY}px) scale(${zoom})`;
-}
-function fitView(){
-  const ww=wrap.clientWidth, wh=wrap.clientHeight;
-  zoom=Math.min(ww/cv.width, wh/cv.height);
-  panX=(ww-cv.width*zoom)/2; panY=(wh-cv.height*zoom)/2;
-  applyTransform();
-}
+function T(){cv.style.transform=`translate(${panX}px,${panY}px) scale(${zoom})`;
+  document.getElementById('zval').textContent=Math.round(zoom*100)+'%';}
+function fit(){const w=stage.clientWidth,h=stage.clientHeight;
+  zoom=Math.min(w/cv.width,h/cv.height)*0.96;
+  panX=(w-cv.width*zoom)/2;panY=(h-cv.height*zoom)/2;T();}
 
 async function load(){
-  const [map, terr] = await Promise.all([
-    fetch('ra1_map.json').then(r=>r.json()),
-    fetch('ra1_terrain.json').then(r=>r.json()).catch(()=>null)
-  ]);
-  W=map.w; H=map.h; grid=map.grid;
-  coll = (terr&&terr.collision) ? terr.collision.map(r=>r.slice()) : map.collision.map(r=>r.slice());
-  cv.width=W*VS; cv.height=H*VS;
-  // tile gorsellerini yukle
-  const keys=new Set(); for(const row of grid) for(const k of row) keys.add(k);
-  let loaded=0; const total=keys.size;
-  // ayrica tiles.json'dan gorselleri al
-  const tiles=await fetch('ra1_tiles.json').then(r=>r.json());
-  for(const k of keys){
-    const im=new Image();
-    im.onload=()=>{ loaded++; if(loaded>=total){ ready=true; draw(); fitView(); } };
-    im.onerror=()=>{ loaded++; if(loaded>=total){ ready=true; draw(); fitView(); } };
-    im.src=tiles[k]||''; tileImg[k]=im;
-  }
-  updateCounts();
-  draw();
+  try{
+    const [map,terr,tiles]=await Promise.all([
+      fetch('ra1_map.json').then(r=>r.json()),
+      fetch('ra1_terrain.json').then(r=>r.json()).catch(()=>null),
+      fetch('ra1_tiles.json').then(r=>r.json())
+    ]);
+    W=map.w;H=map.h;grid=map.grid;
+    coll=(terr&&terr.collision)?terr.collision.map(r=>r.slice()):map.collision.map(r=>r.slice());
+    cv.width=W*VS;cv.height=H*VS;
+    const keys=new Set();for(const row of grid)for(const k of row)keys.add(k);
+    let n=0;const tot=keys.size;
+    for(const k of keys){const im=new Image();
+      im.onload=im.onerror=()=>{n++;if(n>=tot){ready=true;draw();fit();document.getElementById('status').textContent=W+'×'+H;}};
+      im.src=tiles[k]||'';tileImg[k]=im;}
+    updateCounts();draw();
+  }catch(e){document.getElementById('status').textContent='HATA: JSON yüklenemedi';}
 }
 
 function draw(){
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){
-    const k=grid[y][x], im=tileImg[k];
-    if(ready && im && im.complete && im.naturalWidth){
-      ctx.drawImage(im, x*VS, y*VS, VS, VS);
-    } else { ctx.fillStyle='#1c3a22'; ctx.fillRect(x*VS,y*VS,VS,VS); }
-    if(showOverlay){
-      const c=coll[y][x];
-      if(c===2){ ctx.fillStyle='rgba(185,79,240,0.5)'; ctx.fillRect(x*VS,y*VS,VS,VS); }
-      else if(c===1){ ctx.fillStyle='rgba(255,79,94,0.45)'; ctx.fillRect(x*VS,y*VS,VS,VS); }
-    }
+    const im=tileImg[grid[y][x]];
+    if(ready&&im&&im.complete&&im.naturalWidth)ctx.drawImage(im,x*VS,y*VS,VS,VS);
+    else{ctx.fillStyle='#16301d';ctx.fillRect(x*VS,y*VS,VS,VS);}
+    const c=coll[y][x];
+    if(c===2){ctx.fillStyle='rgba(177,79,240,.5)';ctx.fillRect(x*VS,y*VS,VS,VS);}
+    else if(c===1){ctx.fillStyle='rgba(255,80,102,.45)';ctx.fillRect(x*VS,y*VS,VS,VS);}
   }
-  // ince grid
-  ctx.strokeStyle='rgba(255,255,255,0.05)'; ctx.lineWidth=1;
-  for(let x=0;x<=W;x+=4){ ctx.beginPath();ctx.moveTo(x*VS,0);ctx.lineTo(x*VS,H*VS);ctx.stroke(); }
-  for(let y=0;y<=H;y+=4){ ctx.beginPath();ctx.moveTo(0,y*VS);ctx.lineTo(W*VS,y*VS);ctx.stroke(); }
+  ctx.strokeStyle='rgba(255,255,255,.04)';
+  for(let x=0;x<=W;x+=4){ctx.beginPath();ctx.moveTo(x*VS,0);ctx.lineTo(x*VS,H*VS);ctx.stroke();}
+  for(let y=0;y<=H;y+=4){ctx.beginPath();ctx.moveTo(0,y*VS);ctx.lineTo(W*VS,y*VS);ctx.stroke();}
 }
-
-function updateCounts(){
-  let k0=0,k1=0,k2=0;
-  for(const row of coll)for(const c of row){ if(c===0)k0++; else if(c===1)k1++; else k2++; }
+function updateCounts(){let a=0,b=0,c=0;
+  for(const r of coll)for(const v of r){if(v===0)a++;else if(v===1)b++;else c++;}
   document.getElementById('counts').innerHTML=
-    `<span class="pill clear">geçilir ${k0}</span> <span class="pill water">su ${k1}</span> <span class="pill rock">kaya ${k2}</span>`;
-}
+    `<span class="pill c">geçilir ${a}</span><span class="pill w">su ${b}</span><span class="pill r">kaya ${c}</span>`;}
 
-function applyAt(px,py){
-  const gx=Math.floor(px/VS), gy=Math.floor(py/VS);
-  if(gx<0||gx>=W||gy<0||gy>=H) return;
-  const val = painting ? (mode==='rock'?2 : mode==='water'?1 : 0) : 0;
-  const r=Math.floor(brush/2);
+function paintAt(px,py){
+  const gx=Math.floor(px/VS),gy=Math.floor(py/VS);
+  const r=(brush/2)|0;
   for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){
     const x=gx+dx,y=gy+dy;
-    if(x>=0&&x<W&&y>=0&&y<H) coll[y][x]=val;
-  }
+    if(x>=0&&x<W&&y>=0&&y<H)coll[y][x]=paintVal;}
 }
+function pos(e){const rc=cv.getBoundingClientRect();const t=e.touches?e.touches[0]:e;
+  return[(t.clientX-rc.left)/zoom,(t.clientY-rc.top)/zoom];}
 
-let drawing=false, moved=false;
-let lastPan=null, pinchDist=0, pinchZoom=1;
-function evtPos(e){
-  const rect=cv.getBoundingClientRect();
-  const t=e.touches?e.touches[0]:e;
-  // ekran -> canvas piksel (transform'u geri al)
-  return [ (t.clientX-rect.left)/zoom, (t.clientY-rect.top)/zoom ];
+let drawing=false,pinch=0,pz=1;
+function down(e){
+  if(e.touches&&e.touches.length===2){const a=e.touches[0],b=e.touches[1];
+    pinch=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);pz=zoom;drawing=false;e.preventDefault();return;}
+  drawing=true;undo.push(coll.map(r=>r.slice()));if(undo.length>50)undo.shift();
+  const[x,y]=pos(e);paintAt(x,y);draw();e.preventDefault();
 }
-function start(e){
-  if(e.touches&&e.touches.length===2){
-    // pinch baslat
-    const a=e.touches[0],b=e.touches[1];
-    pinchDist=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
-    pinchZoom=zoom; drawing=false; e.preventDefault(); return;
-  }
-  if(panMode){
-    const t=e.touches?e.touches[0]:e;
-    lastPan=[t.clientX,t.clientY]; e.preventDefault(); return;
-  }
-  drawing=true; moved=false;
-  undoStack.push(coll.map(r=>r.slice())); if(undoStack.length>40)undoStack.shift();
-  const [x,y]=evtPos(e); applyAt(x,y); draw();
-  e.preventDefault();
-}
-function move(e){
-  if(e.touches&&e.touches.length===2){
-    const a=e.touches[0],b=e.touches[1];
+function mv(e){
+  if(e.touches&&e.touches.length===2){const a=e.touches[0],b=e.touches[1];
     const d=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
-    if(pinchDist>0){
-      const nz=Math.max(0.2,Math.min(8,pinchZoom*(d/pinchDist)));
-      // pinch merkezine gore zoom
-      const rect=wrap.getBoundingClientRect();
-      const cx=(a.clientX+b.clientX)/2-rect.left, cy=(a.clientY+b.clientY)/2-rect.top;
-      panX=cx-(cx-panX)*(nz/zoom); panY=cy-(cy-panY)*(nz/zoom);
-      zoom=nz; applyTransform();
-    }
-    e.preventDefault(); return;
-  }
-  if(panMode&&lastPan){
-    const t=e.touches?e.touches[0]:e;
-    panX+=t.clientX-lastPan[0]; panY+=t.clientY-lastPan[1];
-    lastPan=[t.clientX,t.clientY]; applyTransform(); e.preventDefault(); return;
-  }
-  if(!drawing) return;
-  const [x,y]=evtPos(e); applyAt(x,y); draw(); moved=true;
-  e.preventDefault();
+    if(pinch>0){const nz=Math.max(.2,Math.min(8,pz*(d/pinch)));
+      const rc=stage.getBoundingClientRect();
+      const cx=(a.clientX+b.clientX)/2-rc.left,cy=(a.clientY+b.clientY)/2-rc.top;
+      panX=cx-(cx-panX)*(nz/zoom);panY=cy-(cy-panY)*(nz/zoom);zoom=nz;T();}
+    e.preventDefault();return;}
+  if(!drawing)return;const[x,y]=pos(e);paintAt(x,y);draw();e.preventDefault();
 }
-function end(){ if(drawing){ drawing=false; updateCounts(); } lastPan=null; pinchDist=0; }
+function up(){if(drawing){drawing=false;updateCounts();}pinch=0;}
+cv.addEventListener('mousedown',down);cv.addEventListener('mousemove',mv);window.addEventListener('mouseup',up);
+cv.addEventListener('touchstart',down,{passive:false});cv.addEventListener('touchmove',mv,{passive:false});window.addEventListener('touchend',up);
 
-cv.addEventListener('mousedown',start); cv.addEventListener('mousemove',move); window.addEventListener('mouseup',end);
-cv.addEventListener('touchstart',start,{passive:false}); cv.addEventListener('touchmove',move,{passive:false}); window.addEventListener('touchend',end);
+function selTool(v,el){paintVal=v;
+  ['tClear','tRock','tWater'].forEach(id=>document.getElementById(id).classList.remove('sel'));
+  el.classList.add('sel');}
+document.getElementById('tClear').onclick=function(){selTool(0,this);};
+document.getElementById('tRock').onclick=function(){selTool(2,this);};
+document.getElementById('tWater').onclick=function(){selTool(1,this);};
 
-function setMode(m){ mode=m; painting=true;
-  document.getElementById('paint').classList.add('on');
-  document.getElementById('erase').classList.remove('on');
-  document.getElementById('mRock').classList.toggle('on',m==='rock');
-  document.getElementById('mWater').classList.toggle('on',m==='water');
-  document.getElementById('mClear').classList.toggle('on',m==='clear');
-}
-document.getElementById('mRock').onclick=()=>setMode('rock');
-document.getElementById('mWater').onclick=()=>setMode('water');
-document.getElementById('mClear').onclick=()=>setMode('clear');
-document.getElementById('paint').onclick=function(){ painting=true; this.classList.add('on'); document.getElementById('erase').classList.remove('on'); };
-document.getElementById('erase').onclick=function(){ painting=false; this.classList.add('on'); document.getElementById('paint').classList.remove('on'); };
-document.getElementById('overlayBtn').onclick=function(){ showOverlay=!showOverlay; this.classList.toggle('on',showOverlay); draw(); };
-document.getElementById('undo').onclick=()=>{ if(undoStack.length){ coll=undoStack.pop(); draw(); updateCounts(); } };
-document.getElementById('b1').onclick=function(){ brush=1; setBrush(this); };
-document.getElementById('b2').onclick=function(){ brush=3; setBrush(this); };
-document.getElementById('b3').onclick=function(){ brush=5; setBrush(this); };
-function setBrush(b){ ['b1','b2','b3'].forEach(id=>document.getElementById(id).classList.remove('on')); b.classList.add('on'); }
+document.getElementById('zin').onclick=()=>{zoom=Math.min(8,zoom*1.25);T();};
+document.getElementById('zout').onclick=()=>{zoom=Math.max(.2,zoom/1.25);T();};
+document.getElementById('zfit').onclick=fit;
+const PAN=80;
+document.getElementById('pL').onclick=()=>{panX+=PAN;T();};
+document.getElementById('pR').onclick=()=>{panX-=PAN;T();};
+document.getElementById('pU').onclick=()=>{panY+=PAN;T();};
+document.getElementById('pD').onclick=()=>{panY-=PAN;T();};
 
-document.getElementById('autoWater').onclick=()=>{
-  undoStack.push(coll.map(r=>r.slice()));
-  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
-    const img=(grid[y][x]||'').split(':')[0];
-    if(img==='w1'||img==='w2'||img.startsWith('rv')||img.startsWith('wc')) coll[y][x]=1;
-  }
-  draw(); updateCounts();
-};
-document.getElementById('clearRock').onclick=()=>{
-  undoStack.push(coll.map(r=>r.slice()));
-  for(let y=0;y<H;y++)for(let x=0;x<W;x++){ if(coll[y][x]===2) coll[y][x]=0; }
-  draw(); updateCounts();
-};
-document.getElementById('clearAll').onclick=()=>{
-  undoStack.push(coll.map(r=>r.slice()));
-  for(let y=0;y<H;y++)for(let x=0;x<W;x++) coll[y][x]=0;
-  draw(); updateCounts();
-};
-document.getElementById('panMode').onclick=function(){ panMode=!panMode; this.classList.toggle('on',panMode); };
-document.getElementById('zoomIn').onclick=()=>{ zoom=Math.min(8,zoom*1.3); applyTransform(); };
-document.getElementById('zoomOut').onclick=()=>{ zoom=Math.max(0.2,zoom/1.3); applyTransform(); };
-document.getElementById('fit').onclick=fitView;
+function selBrush(b,el){brush=b;['fSmall','fMed','fBig'].forEach(id=>document.getElementById(id).classList.remove('on'));el.classList.add('on');}
+document.getElementById('fSmall').onclick=function(){selBrush(1,this);};
+document.getElementById('fMed').onclick=function(){selBrush(3,this);};
+document.getElementById('fBig').onclick=function(){selBrush(5,this);};
 
-document.getElementById('save').onclick=()=>{
-  // speed: kaya=65, diger=100
-  const speed=coll.map(row=>row.map(c=> c===2?65:100 ));
-  const mapOut={ w:W,h:H,ts:TS, grid:grid, collision:coll };
-  const terrOut={ w:W,h:H, collision:coll, speed:speed };
-  dl('ra1_map.json', JSON.stringify(mapOut));
-  setTimeout(()=>dl('ra1_terrain.json', JSON.stringify(terrOut)), 300);
+document.getElementById('undo').onclick=()=>{if(undo.length){coll=undo.pop();draw();updateCounts();}};
+document.getElementById('autoWater').onclick=()=>{undo.push(coll.map(r=>r.slice()));
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){const g=(grid[y][x]||'').split(':')[0];
+    if(g==='w1'||g==='w2'||g.startsWith('rv')||g.startsWith('wc'))coll[y][x]=1;}draw();updateCounts();};
+document.getElementById('clearRock').onclick=()=>{undo.push(coll.map(r=>r.slice()));
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(coll[y][x]===2)coll[y][x]=0;draw();updateCounts();};
+document.getElementById('saveMap').onclick=()=>{
+  dl('ra1_map.json',JSON.stringify({w:W,h:H,ts:TS,grid:grid,collision:coll}));
 };
-function dl(name,txt){
-  const b=new Blob([txt],{type:'application/json'});
-  const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=name; a.click();
-  setTimeout(()=>URL.revokeObjectURL(a.href),2000);
-}
+document.getElementById('saveTerr').onclick=()=>{
+  const speed=coll.map(r=>r.map(c=>c===2?65:100));
+  dl('ra1_terrain.json',JSON.stringify({w:W,h:H,collision:coll,speed:speed}));
+};
+document.getElementById('saveMap').onclick=()=>{
+  dl('ra1_map.json',JSON.stringify({w:W,h:H,ts:TS,grid:grid,collision:coll}));
+};
+document.getElementById('saveTerr').onclick=()=>{
+  const speed=coll.map(r=>r.map(c=>c===2?65:100));
+  dl('ra1_terrain.json',JSON.stringify({w:W,h:H,collision:coll,speed:speed}));
+};
+function dl(name,txt){const b=new Blob([txt],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),2000);}
 
 load();
+window.addEventListener('resize',()=>{if(ready)fit();});
 </script>
 </body>
 </html>
