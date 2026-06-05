@@ -1,7 +1,11 @@
 <!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"><title>RTS - v2.8</title><style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html,body { width:100%; height:100%; overflow:hidden; background:#0d1014; font-family:system-ui,sans-serif; }
-  #game { display:block; touch-action:none; width:100%; height:100%; }
+  #game { display:block; touch-action:none; width:100%; height:100%;
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
+  }
   #hud { position:fixed; top:0; left:0; right:0; padding:8px 12px; color:#cfe8ff; font-size:11px; pointer-events:none; text-shadow:0 1px 3px #000; z-index:2;}
   #hud b { color:#7fd1ff; }
   #status { position:fixed; bottom:62px; left:0; right:0; padding:6px 12px; color:#ffd27f; font-size:11px; pointer-events:none; text-shadow:0 1px 3px #000; text-align:center; z-index:2;}
@@ -61,7 +65,7 @@ const BRAD_M240="assets/images/bradley/bradley_m240.png";
 const BRAD_FIRE=["assets/images/bradley/fire_01.png","assets/images/bradley/fire_02.png","assets/images/bradley/fire_03.png","assets/images/bradley/fire_04.png","assets/images/bradley/fire_05.png","assets/images/bradley/fire_06.png"];
 // Bradley boyutlari (gercek olculere gore: tankin ~%85'i)
 const BRAD_HULL_W=127, BRAD_HULL_H=239, BRAD_TUR_W=179, BRAD_TUR_H=180;
-const BRAD_SCALE=0.1114;       // govde olcegi - yeni haritaya göre küçültüldü
+// BRAD/STR scale sabitleri aşağıda _BASE_ ile tanımlanıyor (satır ~335)
 const BRAD_TUR_SCALE=0.0486;    // kule olcegi
 const BRAD_COST=130;
 
@@ -71,7 +75,7 @@ const STR_TURRET="assets/images/stryker/turret.png";
 const STR_MG="assets/images/stryker/mg.png";
 const STR_FIRE=["assets/images/stryker/fire_03.png","assets/images/stryker/fire_04.png"];
 const STR_HULL_W=304, STR_HULL_H=631, STR_TUR_W=174, STR_TUR_H=252, STR_MG_W=38, STR_MG_H=259;
-const STR_SCALE=0.044;       // govde olcegi - yeni haritaya göre küçültüldü
+// STR_SCALE sabiti aşağıda _BASE_ ile tanımlanıyor
 const STR_TUR_SCALE=0.0343;    // kule olcegi
 const STR_MG_SCALE=0.0272;     // namlu olcegi
 const STR_TURRET_FWD=-0.12;   // kule govde merkezinden ileri/geri offset
@@ -324,17 +328,18 @@ function playStrFire(vol){
   src.connect(g);g.connect(audioCtx.destination);src.start();
   src.stop(audioCtx.currentTime+0.18); // tek atis icin kisa kes
 }
-// Birim/bina scale: harita boyutuna göre dinamik (harita yüklendikten sonra _MAP_SCALE_RATIO güncellenir)
-function getMapRatio(){ return window._MAP_SCALE_RATIO||1; }
+// Birim/bina scale: harita boyutuna göre dinamik
 const _BASE_SCALE=0.0486;
 const _BASE_FAC_SCALE=0.1036;
 const _BASE_BRAD_SCALE=0.1114;
 const _BASE_STR_SCALE=0.044;
+const BRAD_SCALE=_BASE_BRAD_SCALE;
+const STR_SCALE=_BASE_STR_SCALE;
+const SCALE=_BASE_SCALE;
+const FAC_SCALE=_BASE_FAC_SCALE;
+function getMapRatio(){ return window._MAP_SCALE_RATIO||1; }
 function dynScale(base){ return base*getMapRatio(); }
-// Eski sabit referanslar için getter (kullanım yerine çağrılır)
-const SCALE=_BASE_SCALE; // çizimde dynScale(_BASE_SCALE) kullan
 const GROUND_TILE=512;const GROUND_SCALE=0.28;
-const FAC_SCALE=_BASE_FAC_SCALE;   // çizimde dynScale(_BASE_FAC_SCALE) kullan
 let MAP_W=2304,MAP_H=2304;
 const cam={x:0,y:0,zoom:1.3}; // baslangic bakis acisi (daha yakin)
 const MIN_ZOOM=0.32, MAX_ZOOM=2.0; // uzaklastirma alt siniri yukseltildi (cok kuculmesin)
@@ -1806,7 +1811,7 @@ function update(){
       const hdiff=angleDiff(tt,t.hullAngle);
       const trange=t.range||380;
       if(td<=trange&&Math.abs(hdiff)<0.35&&t.spawning<=0){
-        const bl=HELI_H*SCALE*0.42;
+        const bl=HELI_H*dynScale(_BASE_SCALE)*0.42;
         // MAKİNELİ: sık ateş, küçük mermi
         if(t.fireCooldown<=0){
           for(let side of[-1,1]){ // çift namlu
@@ -2072,8 +2077,8 @@ function drawHullTurret(sx,sy,hullAngle,turretAngle,opts){
   const hImg=enemy?eHullImg:hullImg, tImg=enemy?eTurImg:turretImg;
   const HWv=enemy?EHULL_W:HULL_W,HHv=enemy?EHULL_H:HULL_H,TWv=enemy?ETUR_W:TUR_W,THv=enemy?ETUR_H:TUR_H;
   const tpx=enemy?ETPX:TPX, tpy=enemy?ETPY:TPY;
-  const hw=HWv*SCALE*z,hh=HHv*SCALE*z;
-  const tw=TWv*SCALE*z,th=THv*SCALE*z;
+  const hw=HWv*dynScale(_BASE_SCALE)*z,hh=HHv*dynScale(_BASE_SCALE)*z;
+  const tw=TWv*dynScale(_BASE_SCALE)*z,th=THv*dynScale(_BASE_SCALE)*z;
   const dark=opts.dark||false,recoil=(opts.recoil||0)*z,idle=opts.idle||0,muzzle=opts.muzzle||0,alpha=opts.alpha!==undefined?opts.alpha:1;
   // Tank silüet gölgesi (gövde + kule birlikte)
   drawShadowSprite(hImg,sx,sy,hw,hh,hullAngle+Math.PI/2);
@@ -2120,7 +2125,7 @@ function drawSoldier(t){
   const img=frames[fi];
   if(!img||!img.complete)return;
   
-  const sw=img.width*SCALE*1.7*z, sh=img.height*SCALE*1.7*z;
+  const sw=img.width*dynScale(_BASE_SCALE)*1.7*z, sh=img.height*dynScale(_BASE_SCALE)*1.7*z;
   const alpha=t.spawning>0?(0.4+0.6*(1-t.spawning/30)):1;
   // Asker gölgesi - basit küçük elips (ayak dibinde, doğal)
   ctx.save();
@@ -2143,8 +2148,8 @@ function drawSoldier(t){
 }
 function drawChinook(t){
   const [sx,sy]=w2s(t.x,t.y);const z=cam.zoom;
-  const hw=ch47Img.width*SCALE*2.0*z, hh=ch47Img.height*SCALE*2.0*z;
-  const rw=ch47RotorImg.width*SCALE*3.6*z, rh=ch47RotorImg.height*SCALE*3.6*z;
+  const hw=ch47Img.width*dynScale(_BASE_SCALE)*2.0*z, hh=ch47Img.height*dynScale(_BASE_SCALE)*2.0*z;
+  const rw=ch47RotorImg.width*dynScale(_BASE_SCALE)*3.6*z, rh=ch47RotorImg.height*dynScale(_BASE_SCALE)*3.6*z;
   const fly=(t.altitude||0)*z;
   const bob=t.altitude>5?Math.sin(t.bobPhase)*3*z:0;
   const shadowScale=1+(t.altitude>5?Math.sin(t.bobPhase)*0.05:0);
@@ -2188,8 +2193,8 @@ function drawChinook(t){
 
 function drawHeli(t){
   const [sx,sy]=w2s(t.x,t.y);const z=cam.zoom;
-  const hw=HELI_W*SCALE*0.9*z, hh=HELI_H*SCALE*0.9*z;
-  const rw=ROTOR_W*SCALE*1.05*z, rh=ROTOR_H*SCALE*1.05*z;
+  const hw=HELI_W*dynScale(_BASE_SCALE)*0.9*z, hh=HELI_H*dynScale(_BASE_SCALE)*0.9*z;
+  const rw=ROTOR_W*dynScale(_BASE_SCALE)*1.05*z, rh=ROTOR_H*dynScale(_BASE_SCALE)*1.05*z;
   // UÇUŞ YÜKSEKLİĞİ: gövde yukarıda, gölge yerde
   const fly=45*z;
   const bob=Math.sin(t.bobPhase)*3.5*z; // havada salınım (belirgin)
@@ -2350,8 +2355,8 @@ function drawTankWorld(t){
   const [sx,sy]=w2s(t.x,t.y);const z=cam.zoom;
   const isEnemy=t.team==='enemy';
   const HW=isEnemy?EHULL_W:HULL_W, HH=isEnemy?EHULL_H:HULL_H;
-  const hh=HH*SCALE*z;
-  const hw=HW*SCALE*z;
+  const hh=HH*dynScale(_BASE_SCALE)*z;
+  const hw=HW*dynScale(_BASE_SCALE)*z;
   const idle=t.alive?Math.sin(t.idlePhase*4)*0.12*z:0;
   const alpha=t.spawning>0?(0.4+0.6*(1-t.spawning/30)):1;
   drawHullTurret(sx,sy,t.hullAngle,t.turretAngle,{recoil:t.recoil,idle,muzzle:t.muzzle,trackPhase:t.trackPhase,alpha,team:t.team,});
@@ -2533,7 +2538,7 @@ function draw(){
       if(deathFrames&&deathFrames.length>0){
         const img=deathFrames[deathFrames.length-1]; // son ölme karesi (yerde yatan)
         if(img&&img.complete){
-          const sw=img.width*SCALE*1.7*z, sh=img.height*SCALE*1.7*z;
+          const sw=img.width*dynScale(_BASE_SCALE)*1.7*z, sh=img.height*dynScale(_BASE_SCALE)*1.7*z;
           ctx.save();ctx.globalAlpha=Math.min(1,wr.fade);
           ctx.drawImage(img,x-sw/2,y-sh/2,sw,sh);
           ctx.restore();
@@ -2541,7 +2546,7 @@ function draw(){
       }
     } else if(wr.unitType==='heli'){
       // HELİKOPTER ENKAZI: kararmış gövde, yerde (gölge yok, düşmüş)
-      const hw=HELI_W*SCALE*0.9*z,hh=HELI_H*SCALE*0.9*z;
+      const hw=HELI_W*dynScale(_BASE_SCALE)*0.9*z,hh=HELI_H*dynScale(_BASE_SCALE)*0.9*z;
       ctx.save();ctx.globalAlpha=Math.min(1,wr.fade);ctx.translate(x,y);ctx.rotate(wr.a+Math.PI/2);
       ctx.filter='brightness(0.3) saturate(0.4)';
       if(heliImg.complete)ctx.drawImage(heliImg,-hw/2,-hh/2,hw,hh);
