@@ -142,7 +142,7 @@ const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
 })();
 const statusEl=document.getElementById('status');
 let VW,VH,DPR;
-function resize(){DPR=Math.min(window.devicePixelRatio||1,2.5);VW=innerWidth;VH=innerHeight;canvas.width=Math.floor(VW*DPR);canvas.height=Math.floor(VH*DPR);canvas.style.width=VW+'px';canvas.style.height=VH+'px';ctx.setTransform(DPR,0,0,DPR,0,0);ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';}
+function resize(){DPR=Math.min(window.devicePixelRatio||1,2.5);VW=innerWidth;VH=innerHeight;canvas.width=Math.floor(VW*DPR);canvas.height=Math.floor(VH*DPR);canvas.style.width=VW+'px';canvas.style.height=VH+'px';ctx.setTransform(DPR,0,0,DPR,0,0);ctx.imageSmoothingEnabled=false;}
 addEventListener('resize',resize);resize();
 
 const hullImg=new Image();hullImg.src=HULL;
@@ -327,7 +327,9 @@ function playStrFire(vol){
 const SCALE=0.0486;
 const GROUND_TILE=512;const GROUND_SCALE=0.28;
 const FAC_SCALE=0.1036;   // kışla ölçeği küçültüldü
-const MAP_W=2304,MAP_H=2304;
+// MAP_W/MAP_H: harita yüklenince D.MW*D.TW olarak güncellenir
+let MAP_W=2304, MAP_H=2304;
+
 const cam={x:0,y:0,zoom:1.3}; // baslangic bakis acisi (daha yakin)
 const MIN_ZOOM=0.32, MAX_ZOOM=2.0; // uzaklastirma alt siniri yukseltildi (cok kuculmesin)
 function fitZoom(){ return Math.max(VW/MAP_W, VH/MAP_H); } // harita disi bosluk gorunmesin
@@ -453,6 +455,12 @@ async function _loadRA1(){
       g.push((c===1||c===2)?2:1); // 1=su,2=kaya -> engel(2); 0=kara -> 1
     }
     D.grid = g;
+    // Harita boyutlarını dinamik güncelle (herhangi bir tile boyutu çalışsın)
+    D.MW = mapR.w; D.MH = mapR.h; D.TW = mapR.ts || D.TW;
+    // Dinamik değişkenleri güncelle
+    ISLAND_GW = D.MW; ISLAND_GH = D.MH; D_TW = D.TW;
+    MAP_W = D.MW * D.TW;
+    MAP_H = D.MH * D.TW;
     // tile gorsellerini preload
     _ra1Total = Object.keys(RA1_TILES).length;
     for(const k in RA1_TILES){
@@ -478,8 +486,8 @@ let RA1_SPD=null; let RA1_COLL=null;
 const _ra1ImgCache={}; let _ra1Loaded=0; let _ra1Total=0;
 // RA1 verileri fetch ile yuklenecek (init() icinde)
 
-const ISLAND_GW=D.MW, ISLAND_GH=D.MH;
-const D_TW=D.TW; // 20px per tile
+let ISLAND_GW=D.MW, ISLAND_GH=D.MH;
+let D_TW=D.TW; // tile boyutu - harita yüklenince güncellenir
 // D_GRID kaldirildi, D.grid dogrudan kullaniliyor
 // Tile index 2 = ocean/water, all others = land
 function islandAt(wx,wy){
