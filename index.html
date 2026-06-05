@@ -324,12 +324,18 @@ function playStrFire(vol){
   src.connect(g);g.connect(audioCtx.destination);src.start();
   src.stop(audioCtx.currentTime+0.18); // tek atis icin kisa kes
 }
-const SCALE=0.0486;
+// Birim/bina scale: harita boyutuna göre dinamik (harita yüklendikten sonra _MAP_SCALE_RATIO güncellenir)
+function getMapRatio(){ return window._MAP_SCALE_RATIO||1; }
+const _BASE_SCALE=0.0486;
+const _BASE_FAC_SCALE=0.1036;
+const _BASE_BRAD_SCALE=0.1114;
+const _BASE_STR_SCALE=0.044;
+function dynScale(base){ return base*getMapRatio(); }
+// Eski sabit referanslar için getter (kullanım yerine çağrılır)
+const SCALE=_BASE_SCALE; // çizimde dynScale(_BASE_SCALE) kullan
 const GROUND_TILE=512;const GROUND_SCALE=0.28;
-const FAC_SCALE=0.1036;   // kışla ölçeği küçültüldü
-// MAP_W/MAP_H: harita yüklenince D.MW*D.TW olarak güncellenir
-let MAP_W=2304, MAP_H=2304;
-
+const FAC_SCALE=_BASE_FAC_SCALE;   // çizimde dynScale(_BASE_FAC_SCALE) kullan
+let MAP_W=2304,MAP_H=2304;
 const cam={x:0,y:0,zoom:1.3}; // baslangic bakis acisi (daha yakin)
 const MIN_ZOOM=0.32, MAX_ZOOM=2.0; // uzaklastirma alt siniri yukseltildi (cok kuculmesin)
 function fitZoom(){ return Math.max(VW/MAP_W, VH/MAP_H); } // harita disi bosluk gorunmesin
@@ -340,7 +346,8 @@ function s2w(sx,sy){return [sx/cam.zoom+cam.x,sy/cam.zoom+cam.y];}
 // mode kaldırıldı - tek parmak hep seçim/komut
 // kontroller: tek parmak=seç/komut, iki parmak=gez/zoom
 
-const STATS={maxHp:220,dmg:34,moveSpeed:0.6,maxTurn:0.045,turretMaxTurn:0.05,range:252,fireRate:70,accuracyNear:0.95,accuracyFar:0.45,radius:26,alignTolerance:0.18,bulletSpeed:5}; // RWR: tank radius=11, oranlandı
+const STATS={maxHp:220,dmg:34,moveSpeed:0.6,maxTurn:0.045,turretMaxTurn:0.05,range:252,fireRate:70,accuracyNear:0.95,accuracyFar:0.45,get radius(){return Math.round(26*getMapRatio());},alignTolerance:0.18,get bulletSpeed(){return 5*Math.max(0.5,getMapRatio());}};
+
 let resources=1000;
 let buildType='tank';
 const HELI_COST=150;
@@ -455,12 +462,35 @@ async function _loadRA1(){
       g.push((c===1||c===2)?2:1); // 1=su,2=kaya -> engel(2); 0=kara -> 1
     }
     D.grid = g;
-    // Harita boyutlarını dinamik güncelle (herhangi bir tile boyutu çalışsın)
+
+    // ── Dinamik harita boyutu: tüm değerleri güncelle ──────────────
     D.MW = mapR.w; D.MH = mapR.h; D.TW = mapR.ts || D.TW;
-    // Dinamik değişkenleri güncelle
     ISLAND_GW = D.MW; ISLAND_GH = D.MH; D_TW = D.TW;
-    MAP_W = D.MW * D.TW;
-    MAP_H = D.MH * D.TW;
+    MAP_W = D.MW * D.TW; MAP_H = D.MH * D.TW;
+
+    // Harita boyutuna göre birim/bina ölçeğini otomatik ayarla
+    // Referans: 96x96 @ 24px = 2304px haritada SCALE=0.0486
+    const refMapSize = 2304;
+    const mapSize = MAP_W; // kare harita varsayımı
+    const sizeRatio = mapSize / refMapSize;
+    // Birim ve bina scaleleri orantıla
+    window._MAP_SCALE_RATIO = sizeRatio;
+
+    // Factory konumlarını harita köşelerine yerleştir (sol-üst ve sağ-alt)
+    const margin = MAP_W * 0.12;
+    factory.x = margin; factory.y = margin;
+    factory.rallyX = margin + 80; factory.rallyY = margin + 120;
+    factory.w = FAC_W * FAC_SCALE * sizeRatio;
+    factory.h = FAC_H * FAC_SCALE * sizeRatio;
+    enemyFactory.x = MAP_W - margin; enemyFactory.y = MAP_H - margin;
+    enemyFactory.w = FAC_W * FAC_SCALE * sizeRatio;
+    enemyFactory.h = FAC_H * FAC_SCALE * sizeRatio;
+
+    // Kamera başlangıcı: player factory'e bak
+    cam.x = factory.x - VW/cam.zoom/2;
+    cam.y = factory.y - VH/cam.zoom/2;
+    clampCam();
+
     // tile gorsellerini preload
     _ra1Total = Object.keys(RA1_TILES).length;
     for(const k in RA1_TILES){
@@ -487,7 +517,7 @@ const _ra1ImgCache={}; let _ra1Loaded=0; let _ra1Total=0;
 // RA1 verileri fetch ile yuklenecek (init() icinde)
 
 let ISLAND_GW=D.MW, ISLAND_GH=D.MH;
-let D_TW=D.TW; // tile boyutu - harita yüklenince güncellenir
+let D_TW=D.TW;
 // D_GRID kaldirildi, D.grid dogrudan kullaniliyor
 // Tile index 2 = ocean/water, all others = land
 function islandAt(wx,wy){
@@ -1075,7 +1105,14 @@ function setup(){
   spawnEnemyWave(2);
   cam.x=factory.x-VW/cam.zoom/2;cam.y=factory.y-VH/cam.zoom/2;clampCam();
 }
-function spawnEnemyWave(n){waveNum++;for(let i=0;i<n;i++){const sp=findSpawnPoint(enemyFactory.x+(Math.random()-0.5)*60, enemyFactory.y+50+Math.random()*40); tanks.push(makeTank(sp.x,sp.y,'enemy'));}flashStatus(`⚔️ Düşman dalgası ${waveNum}! (${n} tank)`);}
+function spawnEnemyWave(n){waveNum++;for(let i=0;i<n;i++){
+  // enemyFactory her zaman harita içinde (margin=%12), spawn noktası fabrika çevresinde
+  const angle=Math.random()*Math.PI*2;
+  const dist_r=40+Math.random()*80;
+  const ex=Math.max(20,Math.min(MAP_W-20, enemyFactory.x+Math.cos(angle)*dist_r));
+  const ey=Math.max(20,Math.min(MAP_H-20, enemyFactory.y+Math.sin(angle)*dist_r));
+  const sp=findSpawnPoint(ex,ey); tanks.push(makeTank(sp.x,sp.y,'enemy'));
+}flashStatus(`⚔️ Düşman dalgası ${waveNum}! (${n} birim)`);}
 
 let statusFlash='',statusFlashT=0;
 function flashStatus(m){statusFlash=m;statusFlashT=180;}
@@ -1796,7 +1833,7 @@ function update(){
       const tt=Math.atan2(tg.y-t.y,tg.x-t.x);const tdiff=angleDiff(tt,t.turretAngle);
       t.turretAngle+=Math.sign(tdiff)*Math.min(Math.abs(tdiff),0.07);
       const aligned=Math.abs(tdiff)<0.12;
-      const bl=105*(BRAD_SCALE/0.82); // namlu ucu (dunya koordinati, demo ile uyumlu ~38px)
+      const bl=105*(dynScale(_BASE_BRAD_SCALE)/0.82); // namlu ucu (dunya koordinati, demo ile uyumlu ~38px)
       const bx=t.x+Math.cos(t.turretAngle)*bl, by=t.y+Math.sin(t.turretAngle)*bl;
       // 25mm TOP: orta menzil, alan hasari
       if(aligned&&td<=t.range&&t.fire25CD<=0&&t.spawning<=0){
@@ -1827,10 +1864,10 @@ function update(){
       t.turretAngle+=Math.sign(tdiff)*Math.min(Math.abs(tdiff),0.09);
       const aligned=Math.abs(tdiff)<0.12;
       // taret konumu (govde merkezinden ileri+saga offset, govde yonune gore)
-      const fwd=STR_TURRET_FWD*STR_HULL_H*STR_SCALE, rgt=STR_TURRET_RIGHT*STR_HULL_W*STR_SCALE;
+      const fwd=STR_TURRET_FWD*STR_HULL_H*dynScale(_BASE_STR_SCALE), rgt=STR_TURRET_RIGHT*STR_HULL_W*dynScale(_BASE_STR_SCALE);
       const fx=Math.cos(t.hullAngle),fy=Math.sin(t.hullAngle),rx=Math.cos(t.hullAngle+Math.PI/2),ry=Math.sin(t.hullAngle+Math.PI/2);
       const tpx=t.x+fx*fwd+rx*rgt, tpy=t.y+fy*fwd+ry*rgt;
-      const bl=STR_MG_H*STR_SCALE*STR_MG_SCALE*STR_MG_PIVOT; // namlu ucu
+      const bl=STR_MG_H*dynScale(_BASE_STR_SCALE)*STR_MG_SCALE*STR_MG_PIVOT; // namlu ucu
       const bx=tpx+Math.cos(t.turretAngle)*bl, by=tpy+Math.sin(t.turretAngle)*bl;
       if(aligned&&td<=t.range&&t.fireCD<=0&&t.spawning<=0){
         const t01=Math.min(1,td/t.range);const acc=0.9-0.35*t01;const willHit=Math.random()<acc;
@@ -1848,7 +1885,7 @@ function update(){
       t.turretAngle+=Math.sign(tdiff)*Math.min(Math.abs(tdiff),STATS.turretMaxTurn);
       if(td<=STATS.range&&t.fireCooldown<=0&&Math.abs(tdiff)<0.1&&t.spawning<=0){
         const t01=Math.min(1,td/STATS.range);const acc=STATS.accuracyNear+(STATS.accuracyFar-STATS.accuracyNear)*t01;const willHit=Math.random()<acc;
-        const bl=TUR_H*SCALE*0.42;const mx=t.x+Math.cos(t.turretAngle)*bl,my=t.y+Math.sin(t.turretAngle)*bl;
+        const bl=TUR_H*dynScale(_BASE_SCALE)*0.42;const mx=t.x+Math.cos(t.turretAngle)*bl,my=t.y+Math.sin(t.turretAngle)*bl;
         let aimAng=t.turretAngle;if(!willHit)aimAng+=(Math.random()-0.5)*0.25;
         bullets.push({x:mx,y:my,vx:Math.cos(aimAng)*STATS.bulletSpeed,vy:Math.sin(aimAng)*STATS.bulletSpeed,team:t.team,dmg:STATS.dmg,life:140,willHit});
         muzzleFlash(mx,my,aimAng,1.3);t.fireCooldown=STATS.fireRate;t.recoil=10;t.muzzle=6;
@@ -2213,7 +2250,7 @@ function drawBradley(t){
   const [sx,sy]=w2s(t.x,t.y);const z=cam.zoom;
   // Demo orani: hull=0.82, turret=0.46, cannon=0.6, m240=0.55 (turret scale OLMADAN)
   // Oyuna donusum: hepsi BRAD_FIT ile carpilir (demo 0.82 -> oyun 0.298)
-  const BRAD_FIT=BRAD_SCALE/0.82*z; // demo->oyun donusum * zoom
+  const BRAD_FIT=dynScale(_BASE_BRAD_SCALE)/0.82*z; // demo->oyun donusum * zoom
   const hw=bradHullImg.width*0.82*BRAD_FIT, hh=bradHullImg.height*0.82*BRAD_FIT;
   const tw=bradTurImg.width*0.46*BRAD_FIT, th=bradTurImg.height*0.46*BRAD_FIT;
   const idle=t.alive?Math.sin(t.idlePhase*4)*0.12*z:0;
@@ -2258,7 +2295,7 @@ function drawBradFlash(flashT,frame,ang,sx,sy,dist,scale,sideOff){
 }
 function drawStryker(t){
   const [sx,sy]=w2s(t.x,t.y);const z=cam.zoom;
-  const fit=STR_SCALE*z;
+  const fit=dynScale(_BASE_STR_SCALE)*z;
   const hw=STR_HULL_W*fit, hh=STR_HULL_H*fit;
   const idle=t.alive?Math.sin(t.idlePhase*4)*0.1*z:0;
   const alpha=t.spawning>0?(0.4+0.6*(1-t.spawning/30)):1;
@@ -2270,7 +2307,7 @@ function drawStryker(t){
   if(strHullDraw.complete||strHullDraw instanceof HTMLCanvasElement)ctx.drawImage(strHullDraw,-hw/2,-hh/2,hw,hh);
   ctx.restore();
   // TARET KONUMU (govde merkezinden ileri+saga, govde yonune gore - demo ile birebir)
-  const fwd=STR_TURRET_FWD*STR_HULL_H*STR_SCALE*z, rgt=STR_TURRET_RIGHT*STR_HULL_W*STR_SCALE*z;
+  const fwd=STR_TURRET_FWD*STR_HULL_H*dynScale(_BASE_STR_SCALE)*z, rgt=STR_TURRET_RIGHT*STR_HULL_W*dynScale(_BASE_STR_SCALE)*z;
   const fx=Math.cos(t.hullAngle),fy=Math.sin(t.hullAngle),rx=Math.cos(t.hullAngle+Math.PI/2),ry=Math.sin(t.hullAngle+Math.PI/2);
   const tpx=sx+fx*fwd+rx*rgt, tpy=sy+fy*fwd+ry*rgt;
   // TARET + NAMLU (bagimsiz doner)
@@ -2291,7 +2328,7 @@ function drawStryker(t){
   // NAMLU ATESI (fire_03/04) - DEMO v13 ile birebir: namlu ucunda parlak alev
   if(t.flash>0&&strFireImgs[0]&&strFireImgs[0].complete){
     const fr=strFireImgs[Math.min(strFireImgs.length-1,t.flashFrame)];
-    const mlen=STR_MG_H*STR_SCALE*STR_MG_SCALE*z; // demo: IMG.mg.height*SCALE*MG_SCALE
+    const mlen=STR_MG_H*dynScale(_BASE_STR_SCALE)*STR_MG_SCALE*z; // demo: IMG.mg.height*SCALE*MG_SCALE
     const fw=fr.width*STR_SCALE*0.7*z, fh=fr.height*STR_SCALE*0.7*z; // demo: width*SCALE*0.7
     ctx.save();ctx.globalCompositeOperation='lighter';
     ctx.drawImage(fr,-fw/2,-mlen-fh,fw,fh); // demo: -mlen-fh
@@ -2405,7 +2442,7 @@ function drawObstacles(){
 }
 function drawFactory(){
   const [sx,sy]=w2s(factory.x,factory.y);const z=cam.zoom;
-  const fw=FAC_W*FAC_SCALE*z,fh=FAC_H*FAC_SCALE*z;
+  const fw=FAC_W*dynScale(_BASE_FAC_SCALE)*z,fh=FAC_H*dynScale(_BASE_FAC_SCALE)*z;
   if(facImg.complete){
     if(!window._facShadow){ // gölge silüetini bir kez hazırla (siyah versiyon)
       const c=document.createElement('canvas');c.width=facImg.naturalWidth;c.height=facImg.naturalHeight;
@@ -2450,7 +2487,7 @@ function draw(){
       const dw=chunkWorld*z;
       ctx.drawImage(ck,Math.floor(sx),Math.floor(sy),Math.ceil(dw)+1,Math.ceil(dw)+1);
     }
-    ctx.imageSmoothingEnabled=_sm;
+    ctx.imageSmoothingEnabled=false; // her zaman pixelated
   } else {
     // --- FALLBACK: ham karolar (sadece dokular yuklenirken) ---
     const gx0=Math.max(0,Math.floor(cam.x/islandCellW)-1);
@@ -2483,13 +2520,13 @@ function draw(){
   drawObstacles();
   drawFactory();
   // DÜŞMAN KIŞLASI
-  {const [ex,ey]=w2s(enemyFactory.x,enemyFactory.y);const fw=FAC_W*FAC_SCALE*z,fh=FAC_H*FAC_SCALE*z;
+  {const [ex,ey]=w2s(enemyFactory.x,enemyFactory.y);const fw=FAC_W*dynScale(_BASE_FAC_SCALE)*z,fh=FAC_H*dynScale(_BASE_FAC_SCALE)*z;
    if(facImg.complete&&window._facShadow){
      ctx.save();ctx.globalAlpha=0.40;ctx.filter='blur(3px)';ctx.drawImage(window._facShadow,ex-fw/2,ey-fh/2+fh*0.012,fw,fh);ctx.filter='none';ctx.restore();
      const ox=fw*0.04,oy=fh*0.05;ctx.save();ctx.globalAlpha=0.28;ctx.drawImage(window._facShadow,ex-fw/2+ox,ey-fh/2+oy,fw,fh);ctx.restore();}
    if(facImg.complete){const tintedFac=getEnemyTinted(facImg)||facImg;ctx.save();ctx.globalAlpha=1;ctx.globalCompositeOperation="source-over";ctx.drawImage(tintedFac,ex-fw/2,ey-fh/2,fw,fh);ctx.restore();}}
   for(const wr of wrecks){const[x,y]=w2s(wr.x,wr.y);
-    ctx.globalAlpha=Math.min(1,wr.fade)*0.3;ctx.fillStyle='#1a160f';ctx.beginPath();ctx.ellipse(x,y,HULL_W*SCALE*z*0.45,HULL_H*SCALE*z*0.4,0,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;
+    ctx.globalAlpha=Math.min(1,wr.fade)*0.3;ctx.fillStyle='#1a160f';ctx.beginPath();ctx.ellipse(x,y,HULL_W*dynScale(_BASE_SCALE)*z*0.45,HULL_H*dynScale(_BASE_SCALE)*z*0.4,0,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;
     if(wr.unitType==='soldier'){
       // ASKER ENKAZI: yere düşmüş asker görseli
       const deathFrames=sldImgs.death;
